@@ -1,6 +1,73 @@
-# Custom Curve (CSMM) NoOp Hook
+# Call ETH using V4 + oSQTH + Morpho hooks
 
-### NoOp Hooks Flow
+### Hooks Flow
+
+**depositETH**
+
+1. mint 50% of ETH into liquidity in range current tick  + 3 tickSpacing
+2. collaterla 50% on morpho pool
+
+- User calls `deposit` on HookContract
+- it places on morpho 50% of ETH as collateral
+- It unlocks the pool
+- in the unlock callback it does place liquidity 50% remaining ETH
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 NoOp hooks are hooks that can override the PM's own logic for operations - like swaps.
 
