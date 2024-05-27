@@ -39,7 +39,7 @@ contract CallETH is BaseHook {
         return
             Hooks.Permissions({
                 beforeInitialize: false,
-                afterInitialize: false,
+                afterInitialize: true,
                 beforeAddLiquidity: true,
                 afterAddLiquidity: false,
                 beforeRemoveLiquidity: false,
@@ -53,6 +53,20 @@ contract CallETH is BaseHook {
                 afterAddLiquidityReturnDelta: false,
                 afterRemoveLiquidityReturnDelta: false
             });
+    }
+
+    function afterInitialize(
+        address,
+        PoolKey calldata key,
+        uint160,
+        int24,
+        bytes calldata
+    ) external override returns (bytes4) {
+        poolManager.sync(key.currency0);
+        poolManager.sync(key.currency1);
+        console.log("> afterInitialize");
+
+        return CallETH.afterInitialize.selector;
     }
 
     // Disable adding liquidity through the PM
@@ -107,8 +121,8 @@ contract CallETH is BaseHook {
             IPoolManager.ModifyLiquidityParams({
                 tickLower: currentTick,
                 tickUpper: currentTick + key.tickSpacing * 3,
-                liquidityDelta: int256(amount), //TODO: it's not real amount, do the fucking math above
-                salt: "" //TODO: what  the fuk should I do wth it...?
+                liquidityDelta: int256(amount), //TODO: use PerpMath.getLiquidityFromValue here
+                salt: ""
             }),
             ZERO_BYTES
         );

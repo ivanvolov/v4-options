@@ -45,7 +45,11 @@ contract CallETHTest is Test, Deployers {
         alice = TestAccountLib.createTestAccount("alice");
 
         address hookAddress = address(
-            uint160(Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG)
+            uint160(
+                Hooks.AFTER_SWAP_FLAG |
+                    Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
+                    Hooks.AFTER_INITIALIZE_FLAG
+            )
         );
         deployCodeTo("CallETH.sol", abi.encode(manager), hookAddress);
         hook = CallETH(hookAddress);
