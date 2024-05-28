@@ -8,8 +8,8 @@ library PerpMath {
     function getLiquidityFromValue(
         uint256 v,
         uint256 p,
-        uint256 tickLower,
-        uint256 tickUpper
+        int24 tickLower,
+        int24 tickUpper
     ) public pure returns (uint128) {
         return
             getLiquidityForValue(

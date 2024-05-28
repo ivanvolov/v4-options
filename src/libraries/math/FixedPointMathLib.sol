@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
-import "hardhat/console.sol";
-
 interface IDynamicStorage {
     function tokenDecimals(uint256) external view returns (uint8);
 }
@@ -22,7 +20,11 @@ library FixedPointMathLib {
         return mulDivDown(a, WAD, b); // Equivalent to (x * WAD) / y rounded down.
     }
 
-    function wrap(uint256 a, address _storage, uint8 id) internal view returns (uint256) {
+    function wrap(
+        uint256 a,
+        address _storage,
+        uint8 id
+    ) internal view returns (uint256) {
         uint256 tokenWAD = IDynamicStorage(_storage).tokenDecimals(id);
         // console.log("wrap", a, tokenWAD, WAD);
         if (tokenWAD == WAD) return a;
@@ -30,7 +32,11 @@ library FixedPointMathLib {
         if (tokenWAD < WAD) return a * 10 ** (18 - tokenWAD);
     }
 
-    function unwrap(uint256 a, address _storage, uint8 id) internal view returns (uint256) {
+    function unwrap(
+        uint256 a,
+        address _storage,
+        uint8 id
+    ) internal view returns (uint256) {
         uint256 tokenWAD = IDynamicStorage(_storage).tokenDecimals(id);
         // console.log("unwrap", a, tokenWAD, WAD);
         if (tokenWAD == WAD) return a;
@@ -42,11 +48,17 @@ library FixedPointMathLib {
                     LOW LEVEL FIXED POINT OPERATIONS
     ***************************************************************/
 
-    function mulDivDown(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 z) {
+    function mulDivDown(
+        uint256 x,
+        uint256 y,
+        uint256 denominator
+    ) internal pure returns (uint256 z) {
         // *** @solidity memory-safe-assembly
         assembly {
             // Equivalent to require(denominator != 0 && (y == 0 || x <= type(uint256).max / y))
-            if iszero(mul(denominator, iszero(mul(y, gt(x, div(MAX_UINT256, y)))))) {
+            if iszero(
+                mul(denominator, iszero(mul(y, gt(x, div(MAX_UINT256, y)))))
+            ) {
                 revert(0, 0)
             }
 
@@ -55,7 +67,11 @@ library FixedPointMathLib {
         }
     }
 
-    function rpow(uint256 x, uint256 n, uint256 scalar) internal pure returns (uint256 z) {
+    function rpow(
+        uint256 x,
+        uint256 n,
+        uint256 scalar
+    ) internal pure returns (uint256 z) {
         // *** @solidity memory-safe-assembly
         assembly {
             switch x

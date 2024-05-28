@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
-// import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
+import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
@@ -63,7 +63,7 @@ contract CallETHTest is Test, Deployers {
             ZERO_BYTES
         );
 
-        // Approve our hook address to spend these tokens as well
+        // // Approve our hook address to spend these tokens as well
         // IERC20Minimal(Currency.unwrap(currency0)).approve(
         //     address(hook),
         //     type(uint256).max
@@ -73,7 +73,7 @@ contract CallETHTest is Test, Deployers {
         //     type(uint256).max
         // );
 
-        // So let's only have our own liquidity
+        // // So let's only have our own liquidity
         // // Some liquidity from -60 to +60 tick range
         // modifyLiquidityRouter.modifyLiquidity(
         //     key,
@@ -106,6 +106,15 @@ contract CallETHTest is Test, Deployers {
         hook.deposit(key, 1 ether);
         vm.stopPrank();
 
-        // assertEq(manager.getLiquidity(id, address(limitOrder), tickLower, tickLower + 60), liquidity);
+        int24 currentTick = hook.getTick(key);
+        assertEq(
+            manager.getLiquidity(
+                PoolIdLibrary.toId(key),
+                address(hook),
+                currentTick,
+                currentTick + key.tickSpacing * 3
+            ),
+            1 ether
+        );
     }
 }

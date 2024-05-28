@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "hardhat/console.sol";
-
 /**
  * Error
  * MH1: Value is out of range for Int24 conversion.
@@ -13,7 +11,10 @@ import "hardhat/console.sol";
 library MathHelpersLib {
     /// @dev Rounds tick down towards negative infinity so that it's a multiple
     /// of `tickSpacing`.
-    function floor(int24 tick, int24 tickSpacing) external pure returns (int24) {
+    function floor(
+        int24 tick,
+        int24 tickSpacing
+    ) external pure returns (int24) {
         int24 compressed = tick / tickSpacing;
         if (tick < 0 && tick % tickSpacing != 0) compressed--;
         return compressed * tickSpacing;
@@ -25,7 +26,10 @@ library MathHelpersLib {
         return a < b ? a : b;
     }
 
-    function absDifference(uint256 a, uint256 b) external pure returns (uint256) {
+    function absDifference(
+        uint256 a,
+        uint256 b
+    ) external pure returns (uint256) {
         if (a > b) {
             return a - b;
         }

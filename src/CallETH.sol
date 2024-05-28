@@ -62,11 +62,20 @@ contract CallETH is BaseHook {
         int24,
         bytes calldata
     ) external override returns (bytes4) {
-        poolManager.sync(key.currency0);
-        poolManager.sync(key.currency1);
         console.log("> afterInitialize");
+        // console.log(Currency.unwrap(key.currency0));
+        // poolManager.sync(key.currency0);
+        // poolManager.sync(key.currency1);
 
         return CallETH.afterInitialize.selector;
+    }
+
+    function getTick(PoolKey calldata key) public view returns (int24) {
+        (, int24 currentTick, , ) = StateLibrary.getSlot0(
+            poolManager,
+            key.toId()
+        );
+        return currentTick;
     }
 
     // Disable adding liquidity through the PM
@@ -83,7 +92,8 @@ contract CallETH is BaseHook {
         console.log(msg.sender);
         console.log("> address(this)");
         console.log(address(this));
-        revert AddLiquidityThroughHook();
+        // revert AddLiquidityThroughHook();
+        return CallETH.beforeAddLiquidity.selector;
     }
 
     function deposit(PoolKey calldata key, uint256 amount) external {
@@ -111,11 +121,9 @@ contract CallETH is BaseHook {
     ) external selfOnly returns (bytes memory) {
         console.log("> unlockDepositPlace");
 
-        (, int24 currentTick, , ) = StateLibrary.getSlot0(
-            poolManager,
-            key.toId()
-        );
-        // console.log("> current tick", uint256(int256(tick)));
+        int24 currentTick = getTick(key);
+        poolManager.sync(key.currency0);
+        poolManager.sync(key.currency1);
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
             IPoolManager.ModifyLiquidityParams({
