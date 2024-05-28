@@ -2,18 +2,22 @@
 pragma solidity ^0.8.0;
 
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+
 import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {Pool} from "v4-core/libraries/Pool.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
+
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {BaseHook} from "./forks/BaseHook.sol";
+import {PerpMath} from "./libraries/PerpMath.sol";
+
 import "forge-std/console.sol";
 
 contract CallETH is BaseHook {
@@ -92,22 +96,36 @@ contract CallETH is BaseHook {
         console.log(msg.sender);
         console.log("> address(this)");
         console.log(address(this));
-        // revert AddLiquidityThroughHook();
+        // revert AddLiquidityThroughHook(); //TODO: do revert here
         return CallETH.beforeAddLiquidity.selector;
     }
 
-    function deposit(PoolKey calldata key, uint256 amount) external {
+    function deposit(
+        PoolKey calldata key,
+        uint256 amount
+    ) external returns (int24 tickLower, int24 tickUpper) {
         if (amount == 0) revert ZeroLiquidity();
-        IERC20Minimal(Currency.unwrap(key.currency0)).transferFrom(
+        IERC20Minimal(Currency.unwrap(key.currency1)).transferFrom(
             msg.sender,
             address(this),
             amount
-        ); //TODO: now ETH is first currency, but...
+        );
+
+        tickUpper = getTick(key);
+        tickLower = PerpMath.getNearestValidTick(
+            PerpMath.getTickFromPrice(
+                PerpMath.getTickFromPriceFormatted(tickUpper) * 2
+            ),
+            key.tickSpacing
+        );
+
+        // console.log("> currentTick", uint256(int256(tickUpper)));
+        // console.logInt(tickUpper);
 
         poolManager.unlock(
             abi.encodeCall(
                 this.unlockDepositPlace,
-                (key, amount / 2, msg.sender)
+                (key, amount / 2, tickLower, tickUpper)
             )
         );
 
@@ -117,24 +135,31 @@ contract CallETH is BaseHook {
     function unlockDepositPlace(
         PoolKey calldata key,
         uint256 amount,
-        address sender
+        int24 tickLower,
+        int24 tickUpper
     ) external selfOnly returns (bytes memory) {
         console.log("> unlockDepositPlace");
 
-        int24 currentTick = getTick(key);
         poolManager.sync(key.currency0);
         poolManager.sync(key.currency1);
+
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
             IPoolManager.ModifyLiquidityParams({
-                tickLower: currentTick,
-                tickUpper: currentTick + key.tickSpacing * 3,
-                liquidityDelta: int256(amount), //TODO: use PerpMath.getLiquidityFromValue here
+                tickLower: tickLower, //TODO: fix this weird ordering
+                tickUpper: tickUpper,
+                liquidityDelta: PerpMath.getLiquidityForValue(
+                    amount,
+                    PerpMath.getTickFromPriceFormatted(getTick(key)), //TODO: should we do here twap deviation or not?)
+                    tickLower,
+                    tickUpper
+                ),
                 salt: ""
             }),
             ZERO_BYTES
         );
 
+        console.log("> delta");
         console.logInt(delta.amount0());
         console.logInt(delta.amount1());
 

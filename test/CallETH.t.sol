@@ -23,6 +23,9 @@ import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {Deployers} from "v4-core-test/utils/Deployers.sol";
 
 import {CallETH} from "../src/CallETH.sol";
+import {PerpMath} from "../src/libraries/PerpMath.sol";
+
+import "forge-std/console.sol";
 
 contract CallETHTest is Test, Deployers {
     using PoolIdLibrary for PoolId;
@@ -56,68 +59,41 @@ contract CallETHTest is Test, Deployers {
         deployCodeTo("CallETH.sol", abi.encode(manager), hookAddress);
         hook = CallETH(hookAddress);
 
+        console.log("> initialPrice SQRT");
+        int24 initialTick = PerpMath.getNearestValidTick(
+            PerpMath.getTickFromPrice(2000 ether),
+            4
+        );
+        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(initialTick);
+
         (key, ) = initPool(
             currency0,
             currency1,
             hook,
             200, //TODO: set here zero fees somehow?
-            SQRT_PRICE_1_1,
+            initialSQRTPrice,
             ZERO_BYTES
         );
-
-        // // Approve our hook address to spend these tokens as well
-        // IERC20Minimal(Currency.unwrap(currency0)).approve(
-        //     address(hook),
-        //     type(uint256).max
-        // );
-        // IERC20Minimal(Currency.unwrap(currency1)).approve(
-        //     address(hook),
-        //     type(uint256).max
-        // );
-
-        // // So let's only have our own liquidity
-        // // Some liquidity from -60 to +60 tick range
-        // modifyLiquidityRouter.modifyLiquidity(
-        //     key,
-        //     IPoolManager.ModifyLiquidityParams({
-        //         tickLower: -60,
-        //         tickUpper: 60,
-        //         liquidityDelta: 10 ether,
-        //         salt: ""
-        //     }),
-        //     ZERO_BYTES
-        // );
-        // // some liquidity for full range
-        // modifyLiquidityRouter.modifyLiquidity(
-        //     key,
-        //     IPoolManager.ModifyLiquidityParams({
-        //         tickLower: TickMath.minUsableTick(60),
-        //         tickUpper: TickMath.maxUsableTick(60),
-        //         liquidityDelta: 10 ether,
-        //         salt: ""
-        //     }),
-        //     ZERO_BYTES
-        // );
     }
 
     function test_deposit() public {
-        deal(Currency.unwrap(currency0), address(alice.addr), 1 ether);
+        deal(Currency.unwrap(currency1), address(alice.addr), 1 ether);
 
         vm.startPrank(alice.addr);
-        token0.approve(address(hook), type(uint256).max);
-        hook.deposit(key, 1 ether);
+        token1.approve(address(hook), type(uint256).max);
+        (int24 tickLower, int24 tickUpper) = hook.deposit(key, 1 ether);
         vm.stopPrank();
-
-        int24 currentTick = hook.getTick(key);
 
         Position.Info memory positionInfo = StateLibrary.getPosition(
             manager,
             PoolIdLibrary.toId(key),
             address(hook),
-            currentTick,
-            currentTick + key.tickSpacing * 3,
+            tickLower,
+            tickUpper,
             ""
         );
-        assertEq(positionInfo.liquidity, 1 ether);
+        assertEq(positionInfo.liquidity, 76354683254644);
+        assertEq(token1.balanceOf(alice.addr), 0);
+        assertEq(token1.balanceOf(address(hook)), 1 ether);
     }
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
-interface IDynamicStorage {
-    function tokenDecimals(uint256) external view returns (uint8);
-}
+// interface IDynamicStorage {
+//     function tokenDecimals(uint256) external view returns (uint8);
+// }
 
 // *** @notice Arithmetic library with operations for fixed-point numbers.
 // *** @author Inspired by Solmate (https://github.com/transmissions11/solmate/blob/main/src/utils/FixedPointMathLib.sol)
@@ -20,29 +20,29 @@ library FixedPointMathLib {
         return mulDivDown(a, WAD, b); // Equivalent to (x * WAD) / y rounded down.
     }
 
-    function wrap(
-        uint256 a,
-        address _storage,
-        uint8 id
-    ) internal view returns (uint256) {
-        uint256 tokenWAD = IDynamicStorage(_storage).tokenDecimals(id);
-        // console.log("wrap", a, tokenWAD, WAD);
-        if (tokenWAD == WAD) return a;
-        if (tokenWAD > WAD) return a / 10 ** (tokenWAD - 18);
-        if (tokenWAD < WAD) return a * 10 ** (18 - tokenWAD);
-    }
+    // function wrap(
+    //     uint256 a,
+    //     address _storage,
+    //     uint8 id
+    // ) internal view returns (uint256) {
+    //     uint256 tokenWAD = IDynamicStorage(_storage).tokenDecimals(id);
+    //     // console.log("wrap", a, tokenWAD, WAD);
+    //     if (tokenWAD == WAD) return a;
+    //     if (tokenWAD > WAD) return a / 10 ** (tokenWAD - 18);
+    //     if (tokenWAD < WAD) return a * 10 ** (18 - tokenWAD);
+    // }
 
-    function unwrap(
-        uint256 a,
-        address _storage,
-        uint8 id
-    ) internal view returns (uint256) {
-        uint256 tokenWAD = IDynamicStorage(_storage).tokenDecimals(id);
-        // console.log("unwrap", a, tokenWAD, WAD);
-        if (tokenWAD == WAD) return a;
-        if (tokenWAD > WAD) return a * 10 ** (tokenWAD - 18);
-        if (tokenWAD < WAD) return a / 10 ** (18 - tokenWAD);
-    }
+    // function unwrap(
+    //     uint256 a,
+    //     address _storage,
+    //     uint8 id
+    // ) internal view returns (uint256) {
+    //     uint256 tokenWAD = IDynamicStorage(_storage).tokenDecimals(id);
+    //     // console.log("unwrap", a, tokenWAD, WAD);
+    //     if (tokenWAD == WAD) return a;
+    //     if (tokenWAD > WAD) return a * 10 ** (tokenWAD - 18);
+    //     if (tokenWAD < WAD) return a / 10 ** (18 - tokenWAD);
+    // }
 
     /***************************************************************
                     LOW LEVEL FIXED POINT OPERATIONS

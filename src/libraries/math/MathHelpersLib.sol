@@ -14,7 +14,7 @@ library MathHelpersLib {
     function floor(
         int24 tick,
         int24 tickSpacing
-    ) external pure returns (int24) {
+    ) internal pure returns (int24) {
         int24 compressed = tick / tickSpacing;
         if (tick < 0 && tick % tickSpacing != 0) compressed--;
         return compressed * tickSpacing;
@@ -22,14 +22,14 @@ library MathHelpersLib {
 
     //? Math functions
 
-    function min(uint256 a, uint256 b) external pure returns (uint256) {
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
         return a < b ? a : b;
     }
 
     function absDifference(
         uint256 a,
         uint256 b
-    ) external pure returns (uint256) {
+    ) internal pure returns (uint256) {
         if (a > b) {
             return a - b;
         }
@@ -37,17 +37,17 @@ library MathHelpersLib {
     }
 
     //? Type casting functions
-    function toInt24(int256 value) external pure returns (int24) {
+    function toInt24(int256 value) internal pure returns (int24) {
         require(value >= type(int24).min && value <= type(int24).max, "MH1");
         return int24(value);
     }
 
-    function toUint128(uint256 x) external pure returns (uint128) {
+    function toUint128(uint256 x) internal pure returns (uint128) {
         require(x <= type(uint128).max, "MH2");
         return uint128(x);
     }
 
-    function toUint160(uint256 x) external pure returns (uint160) {
+    function toUint160(uint256 x) internal pure returns (uint160) {
         require(x <= type(uint160).max, "MH3");
         return uint160(x);
     }
