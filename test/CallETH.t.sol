@@ -70,7 +70,7 @@ contract CallETHTest is Test, Deployers {
             currency0,
             currency1,
             hook,
-            200, //TODO: set here zero fees somehow?
+            200,
             initialSQRTPrice,
             ZERO_BYTES
         );

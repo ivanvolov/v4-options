@@ -8,6 +8,8 @@ import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {Pool} from "v4-core/libraries/Pool.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
+import {TickMath} from "v4-core/libraries/TickMath.sol";
+import {LiquidityAmounts} from "v4-core/../test/utils/LiquidityAmounts.sol";
 
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Currency} from "v4-core/types/Currency.sol";
@@ -68,8 +70,6 @@ contract CallETH is BaseHook {
     ) external override returns (bytes4) {
         console.log("> afterInitialize");
         // console.log(Currency.unwrap(key.currency0));
-        // poolManager.sync(key.currency0);
-        // poolManager.sync(key.currency1);
 
         return CallETH.afterInitialize.selector;
     }
@@ -140,19 +140,20 @@ contract CallETH is BaseHook {
     ) external selfOnly returns (bytes memory) {
         console.log("> unlockDepositPlace");
 
-        poolManager.sync(key.currency0);
-        poolManager.sync(key.currency1);
-
+        console.log(amount);
+        console.logInt(tickLower);
+        console.logInt(tickUpper);
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
             IPoolManager.ModifyLiquidityParams({
-                tickLower: tickLower, //TODO: fix this weird ordering
+                tickLower: tickLower,
                 tickUpper: tickUpper,
-                liquidityDelta: PerpMath.getLiquidityForValue(
-                    amount,
-                    PerpMath.getTickFromPriceFormatted(getTick(key)), //TODO: should we do here twap deviation or not?)
-                    tickLower,
-                    tickUpper
+                liquidityDelta: int128(
+                    LiquidityAmounts.getLiquidityForAmount1(
+                        TickMath.getSqrtPriceAtTick(tickLower),
+                        TickMath.getSqrtPriceAtTick(tickUpper),
+                        amount
+                    )
                 ),
                 salt: ""
             }),
@@ -166,19 +167,21 @@ contract CallETH is BaseHook {
         if (delta.amount0() < 0) {
             if (delta.amount1() != 0) revert InRange();
 
-            IERC20Minimal(Currency.unwrap(key.currency0)).transfer(
-                address(poolManager),
-                uint256(uint128(-delta.amount0()))
+            key.currency0.settle(
+                poolManager,
+                address(this),
+                uint256(uint128(-delta.amount0())),
+                false
             );
-            poolManager.settle(key.currency0);
         } else {
             if (delta.amount0() != 0) revert InRange();
 
-            IERC20Minimal(Currency.unwrap(key.currency1)).transfer(
-                address(poolManager),
-                uint256(uint128(-delta.amount1()))
+            key.currency1.settle(
+                poolManager,
+                address(this),
+                uint256(uint128(-delta.amount1())),
+                false
             );
-            poolManager.settle(key.currency1);
         }
     }
 }
