@@ -92,8 +92,8 @@ contract CallETHTest is Test, Deployers {
             tickUpper,
             ""
         );
-        assertEq(positionInfo.liquidity, 76354683254644);
+        assertEq(positionInfo.liquidity, 76354683210186);
         assertEq(token1.balanceOf(alice.addr), 0);
-        assertEq(token1.balanceOf(address(hook)), 1 ether);
+        assertEq(token1.balanceOf(address(hook)), 500000000000004110);
     }
 }

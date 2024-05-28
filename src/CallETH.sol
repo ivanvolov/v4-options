@@ -69,7 +69,6 @@ contract CallETH is BaseHook {
         bytes calldata
     ) external override returns (bytes4) {
         console.log("> afterInitialize");
-        // console.log(Currency.unwrap(key.currency0));
 
         return CallETH.afterInitialize.selector;
     }
@@ -89,15 +88,7 @@ contract CallETH is BaseHook {
         IPoolManager.ModifyLiquidityParams calldata,
         bytes calldata
     ) external view override returns (bytes4) {
-        console.log("> beforeAddLiquidity");
-        console.log("> sender");
-        console.log(sender);
-        console.log("> msg.sender");
-        console.log(msg.sender);
-        console.log("> address(this)");
-        console.log(address(this));
-        // revert AddLiquidityThroughHook(); //TODO: do revert here
-        return CallETH.beforeAddLiquidity.selector;
+        revert AddLiquidityThroughHook();
     }
 
     function deposit(
@@ -113,14 +104,9 @@ contract CallETH is BaseHook {
 
         tickUpper = getTick(key);
         tickLower = PerpMath.getNearestValidTick(
-            PerpMath.getTickFromPrice(
-                PerpMath.getTickFromPriceFormatted(tickUpper) * 2
-            ),
+            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickUpper) * 2),
             key.tickSpacing
         );
-
-        // console.log("> currentTick", uint256(int256(tickUpper)));
-        // console.logInt(tickUpper);
 
         poolManager.unlock(
             abi.encodeCall(
