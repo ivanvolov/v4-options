@@ -10,6 +10,8 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TestAccount, TestAccountLib} from "./libraries/TestAccountLib.t.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
+import {Position} from "v4-core/libraries/Position.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
@@ -107,14 +109,15 @@ contract CallETHTest is Test, Deployers {
         vm.stopPrank();
 
         int24 currentTick = hook.getTick(key);
-        assertEq(
-            manager.getLiquidity(
-                PoolIdLibrary.toId(key),
-                address(hook),
-                currentTick,
-                currentTick + key.tickSpacing * 3
-            ),
-            1 ether
+
+        Position.Info memory positionInfo = StateLibrary.getPosition(
+            manager,
+            PoolIdLibrary.toId(key),
+            address(hook),
+            currentTick,
+            currentTick + key.tickSpacing * 3,
+            ""
         );
+        assertEq(positionInfo.liquidity, 1 ether);
     }
 }

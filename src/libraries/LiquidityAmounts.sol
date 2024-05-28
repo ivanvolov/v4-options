@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "v4-core/libraries/FullMath.sol";
 import "v4-core/libraries/FixedPoint96.sol";
+import "v4-core/libraries/TickMath.sol";
 
 /// @title Liquidity amount functions
 /// @notice Provides functions for computing liquidity amounts from token amounts and prices
@@ -12,6 +13,11 @@ library LiquidityAmounts {
     /// @return y The passed value, downcasted to uint128
     function toUint128(uint256 x) private pure returns (uint128 y) {
         require((y = uint128(x)) == x);
+    }
+
+    function getPriceFromTick(int24 tick) public pure returns (uint256) {
+        uint256 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(tick);
+        return (sqrtPriceX96 * sqrtPriceX96) >> (96 * 2);
     }
 
     /// @notice Computes the amount of liquidity received for a given amount of token0 and price range
