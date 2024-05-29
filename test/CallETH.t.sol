@@ -76,6 +76,8 @@ contract CallETHTest is Test, Deployers {
         );
     }
 
+    function test_morpho_blue_market() public {}
+
     function test_deposit() public {
         deal(Currency.unwrap(currency1), address(alice.addr), 1 ether);
 
