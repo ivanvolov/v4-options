@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "morpho-blue/interfaces/IMorpho.sol";
 
 import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
@@ -34,7 +35,14 @@ contract CallETH is BaseHook {
 
     bytes internal constant ZERO_BYTES = bytes("");
 
-    constructor(IPoolManager poolManager) BaseHook(poolManager) {}
+    Id public immutable marketId;
+
+    IMorpho public constant morpho =
+        IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+
+    constructor(IPoolManager poolManager, Id _marketId) BaseHook(poolManager) {
+        marketId = _marketId;
+    }
 
     function getHookPermissions()
         public
@@ -69,6 +77,10 @@ contract CallETH is BaseHook {
         bytes calldata
     ) external override returns (bytes4) {
         console.log("> afterInitialize");
+        IERC20Minimal(Currency.unwrap(key.currency1)).approve(
+            address(morpho),
+            type(uint256).max
+        );
 
         return CallETH.afterInitialize.selector;
     }
@@ -96,17 +108,21 @@ contract CallETH is BaseHook {
         uint256 amount
     ) external returns (int24 tickLower, int24 tickUpper) {
         if (amount == 0) revert ZeroLiquidity();
-        IERC20Minimal(Currency.unwrap(key.currency1)).transferFrom(
+        IERC20Minimal(Currency.unwrap(key.currency0)).transferFrom(
             msg.sender,
             address(this),
             amount
         );
 
+        console.log("!");
         tickUpper = getTick(key);
+        console.logInt(tickUpper);
+        console.log(PerpMath.getPriceFromTick(tickUpper));
         tickLower = PerpMath.getNearestValidTick(
             PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickUpper) * 2),
             key.tickSpacing
         );
+        console.log("!");
 
         poolManager.unlock(
             abi.encodeCall(
@@ -115,7 +131,19 @@ contract CallETH is BaseHook {
             )
         );
 
-        //TODO: do Aave deposit here
+        // console.log(
+        //     IERC20Minimal(Currency.unwrap(key.currency1)).balanceOf(
+        //         address(this)
+        //     )
+        // );
+        // morpho.supplyCollateral(
+        //     morpho.idToMarketParams(marketId),
+        //     IERC20Minimal(Currency.unwrap(key.currency1)).balanceOf(
+        //         address(this)
+        //     ),
+        //     address(this),
+        //     ""
+        // );
     }
 
     function unlockDepositPlace(
@@ -135,7 +163,7 @@ contract CallETH is BaseHook {
                 tickLower: tickLower,
                 tickUpper: tickUpper,
                 liquidityDelta: int128(
-                    LiquidityAmounts.getLiquidityForAmount1(
+                    LiquidityAmounts.getLiquidityForAmount0( //TODO: This is so fucker up
                         TickMath.getSqrtPriceAtTick(tickLower),
                         TickMath.getSqrtPriceAtTick(tickUpper),
                         amount
@@ -151,6 +179,7 @@ contract CallETH is BaseHook {
         console.logInt(delta.amount1());
 
         if (delta.amount0() < 0) {
+            console.log("> I want to get wstETH");
             if (delta.amount1() != 0) revert InRange();
 
             key.currency0.settle(
@@ -160,6 +189,7 @@ contract CallETH is BaseHook {
                 false
             );
         } else {
+            console.log("> I want to get usdc");
             if (delta.amount0() != 0) revert InRange();
 
             key.currency1.settle(
