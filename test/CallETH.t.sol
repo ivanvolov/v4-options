@@ -148,7 +148,7 @@ contract CallETHTest is Test, Deployers {
 
         console.log("> initialPrice SQRT");
         int24 initialTick = PerpMath.getNearestValidTick(
-            PerpMath.getTickFromPrice(2000 * 1e6),
+            PerpMath.getTickFromPrice(2000 ether),
             4
         );
         uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(initialTick);
