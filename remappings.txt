@@ -9,3 +9,4 @@ solmate/=lib/v4-core/lib/solmate/src/
 v4-core/=lib/v4-core/src/
 v4-core-test/=lib/v4-core/test/
 morpho-blue/=lib/morpho-blue/src/
+morpho-blue-oracles/=lib/morpho-blue-oracles/src/

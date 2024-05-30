@@ -10,7 +10,10 @@ import {IMorpho, MarketParams, Id, Position as MorphoPosition} from "morpho-blue
 
 import {IOracle} from "morpho-blue/interfaces/IOracle.sol";
 import {MarketParamsLib} from "morpho-blue/libraries/MarketParamsLib.sol";
-import {MorphoChainlinkOracleV2} from "morpho-blue/oracles/MorphoChainlinkOracleV2.sol";
+import {IMorphoChainlinkOracleV2Factory} from "morpho-blue-oracles/morpho-chainlink/interfaces/IMorphoChainlinkOracleV2Factory.sol";
+import {MorphoChainlinkOracleV2} from "morpho-blue-oracles/morpho-chainlink/MorphoChainlinkOracleV2.sol";
+import {AggregatorV3Interface} from "morpho-blue-oracles/morpho-chainlink/libraries/ChainlinkDataFeedLib.sol";
+import {IERC4626} from "morpho-blue-oracles/morpho-chainlink/libraries/VaultLib.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TestAccount, TestAccountLib} from "./libraries/TestAccountLib.t.sol";
@@ -43,34 +46,113 @@ contract CallETHTest is Test, Deployers {
     TestAccount marketCreator;
     TestAccount morphoLpProvider;
 
-    address constant MORPHO_MAINNET =
-        0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
-    IMorpho morpho;
-
-    // The two currencies (tokens) from the pool
     TestERC20 token0;
     TestERC20 token1;
 
-    TestERC20 weth;
+    TestERC20 wstETH;
     TestERC20 usdc;
-
-    address constant WETH_ADDRESS = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address constant USDC_ADDRESS = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
     function setUp() public {
         deployFreshManagerAndRouters();
-        (currency0, currency1) = deployMintAndApprove2Currencies();
 
-        morpho = IMorpho(MORPHO_MAINNET);
+        alice = TestAccountLib.createTestAccount("alice");
+
+        init_hook();
+        init_morpho_oracle();
+        create_and_seed_morpho_market();
+    }
+
+    function test_morpho_blue_market() public {
+        // // ** Deposit
+        // deal(address(wstETH), morphoLpProvider.addr, 1 ether);
+
+        // vm.startPrank(morphoLpProvider.addr);
+        // wstETH.approve(address(morpho), type(uint256).max);
+        // (uint256 assets, uint256 shares) = morpho.supply(
+        //     marketParams,
+        //     1 ether,
+        //     0,
+        //     morphoLpProvider.addr,
+        //     ""
+        // );
+
+        // MorphoPosition memory p = morpho.position(
+        //     MarketParamsLib.id(marketParams),
+        //     morphoLpProvider.addr
+        // );
+        // assertEq(p.supplyShares, shares);
+        // assertEq(p.borrowShares, 0);
+        // assertEq(p.collateral, 0);
+        // assertEq(wstETH.balanceOf(morphoLpProvider.addr), 0);
+        // vm.stopPrank();
+
+        // ** Supply collateral
+        uint256 collateralAmount = 4000 * 1e6;
+        deal(address(usdc), address(alice.addr), collateralAmount);
+
+        vm.startPrank(alice.addr);
+        // console.log(usdc.balanceOf(alice.addr));
+        usdc.approve(address(morpho), type(uint256).max);
+        morpho.supplyCollateral(marketParams, collateralAmount, alice.addr, "");
+
+        p = morpho.position(MarketParamsLib.id(marketParams), alice.addr);
+        assertEq(p.supplyShares, 0);
+        assertEq(p.borrowShares, 0);
+        assertEq(p.collateral, collateralAmount);
+        assertEq(usdc.balanceOf(alice.addr), 0);
+
+        // ** Borrow
+        uint256 borrowAmount = 1 ether / 4;
+        (assets, shares) = morpho.borrow(
+            marketParams,
+            borrowAmount,
+            0,
+            alice.addr,
+            alice.addr
+        );
+
+        p = morpho.position(MarketParamsLib.id(marketParams), alice.addr);
+        assertEq(p.supplyShares, 0);
+        assertEq(p.borrowShares, shares);
+        assertEq(wstETH.balanceOf(alice.addr), assets);
+        assertEq(p.collateral, collateralAmount);
+        vm.stopPrank();
+    }
+
+    function test_deposit() public {
+        deal(Currency.unwrap(currency1), address(alice.addr), 1 ether);
+
+        vm.startPrank(alice.addr);
+        token1.approve(address(hook), type(uint256).max);
+        (int24 tickLower, int24 tickUpper) = hook.deposit(key, 1 ether);
+        vm.stopPrank();
+
+        Position.Info memory positionInfo = StateLibrary.getPosition(
+            manager,
+            PoolIdLibrary.toId(key),
+            address(hook),
+            tickLower,
+            tickUpper,
+            ""
+        );
+        assertEq(positionInfo.liquidity, 76354683210186);
+        assertEq(token1.balanceOf(alice.addr), 0);
+        assertEq(token1.balanceOf(address(hook)), 500000000000004110);
+    }
+
+    // -- Helpers --
+
+    IMorphoChainlinkOracleV2Factory morphoOracleFactory;
+    MorphoChainlinkOracleV2 morphoOracle;
+
+    MarketParams public marketParams;
+    IMorpho morpho;
+
+    function init_hook() internal {
+        (currency0, currency1) = deployMintAndApprove2Currencies();
 
         token0 = TestERC20(Currency.unwrap(currency0));
         token1 = TestERC20(Currency.unwrap(currency1));
-        weth = TestERC20(WETH_ADDRESS);
-        usdc = TestERC20(USDC_ADDRESS);
-
-        alice = TestAccountLib.createTestAccount("alice");
-        marketCreator = TestAccountLib.createTestAccount("marketCreator");
-        morphoLpProvider = TestAccountLib.createTestAccount("morphoLpProvider");
 
         address hookAddress = address(
             uint160(
@@ -99,16 +181,39 @@ contract CallETHTest is Test, Deployers {
         );
     }
 
-    function test_deloy_morpho_oracle() public {
-        0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
+    function init_morpho_oracle() internal {
+        morphoOracleFactory = IMorphoChainlinkOracleV2Factory(
+            0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
+        );
+        morphoOracle = morphoOracleFactory.createMorphoChainlinkOracleV2(
+            IERC4626(0x0000000000000000000000000000000000000000),
+            1,
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            18,
+            IERC4626(0x0000000000000000000000000000000000000000),
+            1,
+            AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46),
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            6,
+            "0x"
+        );
+
+        // console.log(oracle.price());
     }
 
-    function test_morpho_blue_market() public {
-        // Create market
-        MarketParams memory marketParams = MarketParams({
-            loanToken: address(weth),
+    function create_and_seed_morpho_market() internal {
+        marketCreator = TestAccountLib.createTestAccount("marketCreator");
+        morphoLpProvider = TestAccountLib.createTestAccount("morphoLpProvider");
+
+        wstETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+        usdc = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+
+        morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+        marketParams = MarketParams({
+            loanToken: address(wstETH),
             collateralToken: address(usdc),
-            oracle: 0x2a01EB9496094dA03c4E364Def50f5aD1280AD72,
+            oracle: 0x48F7E36EB6B826B2dF4B2E630B62Cd25e89E40e2,
             irm: 0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC,
             lltv: 945000000000000000
         });
@@ -117,82 +222,5 @@ contract CallETHTest is Test, Deployers {
 
         uint256 collateralPrice = IOracle(marketParams.oracle).price();
         console.log("> collateralPrice", collateralPrice);
-
-        // ** Deposit
-        deal(address(weth), morphoLpProvider.addr, 1 ether);
-
-        vm.startPrank(morphoLpProvider.addr);
-        weth.approve(MORPHO_MAINNET, type(uint256).max);
-        (uint256 assets, uint256 shares) = morpho.supply(
-            marketParams,
-            1 ether,
-            0,
-            morphoLpProvider.addr,
-            ""
-        );
-        vm.stopPrank();
-
-        MorphoPosition memory p = morpho.position(
-            MarketParamsLib.id(marketParams),
-            morphoLpProvider.addr
-        );
-        assertEq(p.supplyShares, shares);
-        assertEq(p.borrowShares, 0);
-        assertEq(p.collateral, 0);
-        assertEq(weth.balanceOf(morphoLpProvider.addr), 0);
-
-        // ** Supply collateral
-        uint256 collateralAmount = 2000 * 1e6;
-        deal(address(usdc), address(alice.addr), collateralAmount);
-
-        vm.startPrank(alice.addr);
-        console.log(usdc.balanceOf(alice.addr));
-        usdc.approve(MORPHO_MAINNET, type(uint256).max);
-        morpho.supplyCollateral(marketParams, collateralAmount, alice.addr, "");
-        vm.stopPrank();
-
-        p = morpho.position(MarketParamsLib.id(marketParams), alice.addr);
-        assertEq(p.supplyShares, 0);
-        assertEq(p.borrowShares, 0);
-        assertEq(p.collateral, collateralAmount);
-        assertEq(usdc.balanceOf(alice.addr), 0);
-
-        // ** Borrow
-        uint256 borrowAmount = 10;
-        vm.prank(alice.addr);
-        (assets, shares) = morpho.borrow(
-            marketParams,
-            borrowAmount,
-            0,
-            alice.addr,
-            alice.addr
-        );
-
-        p = morpho.position(MarketParamsLib.id(marketParams), alice.addr);
-        assertEq(p.supplyShares, 0);
-        assertEq(p.borrowShares, shares);
-        assertEq(weth.balanceOf(alice.addr), assets);
-        assertEq(p.collateral, collateralAmount);
-    }
-
-    function test_deposit() public {
-        deal(Currency.unwrap(currency1), address(alice.addr), 1 ether);
-
-        vm.startPrank(alice.addr);
-        token1.approve(address(hook), type(uint256).max);
-        (int24 tickLower, int24 tickUpper) = hook.deposit(key, 1 ether);
-        vm.stopPrank();
-
-        Position.Info memory positionInfo = StateLibrary.getPosition(
-            manager,
-            PoolIdLibrary.toId(key),
-            address(hook),
-            tickLower,
-            tickUpper,
-            ""
-        );
-        assertEq(positionInfo.liquidity, 76354683210186);
-        assertEq(token1.balanceOf(alice.addr), 0);
-        assertEq(token1.balanceOf(address(hook)), 500000000000004110);
     }
 }
