@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
 
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {IMorpho, MarketParams, Id, Position as MorphoPosition} from "morpho-blue/interfaces/IMorpho.sol";
 
+import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "morpho-blue/interfaces/IMorpho.sol";
+import {Morpho} from "morpho-blue/Morpho.sol";
 import {IOracle} from "morpho-blue/interfaces/IOracle.sol";
 import {MarketParamsLib} from "morpho-blue/libraries/MarketParamsLib.sol";
 import {IMorphoChainlinkOracleV2Factory} from "morpho-blue-oracles/morpho-chainlink/interfaces/IMorphoChainlinkOracleV2Factory.sol";
@@ -63,58 +64,43 @@ contract CallETHTest is Test, Deployers {
     }
 
     function test_morpho_blue_market() public {
-        // // ** Deposit
-        // deal(address(wstETH), morphoLpProvider.addr, 1 ether);
-
-        // vm.startPrank(morphoLpProvider.addr);
-        // wstETH.approve(address(morpho), type(uint256).max);
-        // (uint256 assets, uint256 shares) = morpho.supply(
-        //     marketParams,
-        //     1 ether,
-        //     0,
-        //     morphoLpProvider.addr,
-        //     ""
-        // );
-
-        // MorphoPosition memory p = morpho.position(
-        //     MarketParamsLib.id(marketParams),
-        //     morphoLpProvider.addr
-        // );
-        // assertEq(p.supplyShares, shares);
-        // assertEq(p.borrowShares, 0);
-        // assertEq(p.collateral, 0);
-        // assertEq(wstETH.balanceOf(morphoLpProvider.addr), 0);
-        // vm.stopPrank();
+        MorphoPosition memory p;
+        uint256 assets;
+        uint256 shares;
 
         // ** Supply collateral
-        uint256 collateralAmount = 4000 * 1e6;
-        deal(address(usdc), address(alice.addr), collateralAmount);
-
         vm.startPrank(alice.addr);
-        // console.log(usdc.balanceOf(alice.addr));
-        usdc.approve(address(morpho), type(uint256).max);
-        morpho.supplyCollateral(marketParams, collateralAmount, alice.addr, "");
+        uint256 collateralAmount = 1 ether;
+        deal(address(wstETH), address(alice.addr), collateralAmount);
 
-        p = morpho.position(MarketParamsLib.id(marketParams), alice.addr);
+        wstETH.approve(address(morpho), type(uint256).max);
+        morpho.supplyCollateral(
+            morpho.idToMarketParams(Id.wrap(marketId)),
+            collateralAmount,
+            alice.addr,
+            ""
+        );
+
+        p = morpho.position(Id.wrap(marketId), alice.addr);
         assertEq(p.supplyShares, 0);
         assertEq(p.borrowShares, 0);
         assertEq(p.collateral, collateralAmount);
-        assertEq(usdc.balanceOf(alice.addr), 0);
+        assertEq(wstETH.balanceOf(alice.addr), 0);
 
         // ** Borrow
-        uint256 borrowAmount = 1 ether / 4;
+        uint256 borrowAmount = 100 * 1e6;
         (assets, shares) = morpho.borrow(
-            marketParams,
+            morpho.idToMarketParams(Id.wrap(marketId)),
             borrowAmount,
             0,
             alice.addr,
             alice.addr
         );
 
-        p = morpho.position(MarketParamsLib.id(marketParams), alice.addr);
+        p = morpho.position(Id.wrap(marketId), alice.addr);
         assertEq(p.supplyShares, 0);
         assertEq(p.borrowShares, shares);
-        assertEq(wstETH.balanceOf(alice.addr), assets);
+        assertEq(usdc.balanceOf(alice.addr), borrowAmount);
         assertEq(p.collateral, collateralAmount);
         vm.stopPrank();
     }
@@ -144,6 +130,7 @@ contract CallETHTest is Test, Deployers {
 
     IMorphoChainlinkOracleV2Factory morphoOracleFactory;
     MorphoChainlinkOracleV2 morphoOracle;
+    bytes32 marketId;
 
     MarketParams public marketParams;
     IMorpho morpho;
@@ -210,17 +197,49 @@ contract CallETHTest is Test, Deployers {
         usdc = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
         morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
-        marketParams = MarketParams({
-            loanToken: address(wstETH),
-            collateralToken: address(usdc),
-            oracle: 0x48F7E36EB6B826B2dF4B2E630B62Cd25e89E40e2,
-            irm: 0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC,
-            lltv: 945000000000000000
-        });
+
+        bytes32 targetMarketId = 0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc;
+        marketParams = morpho.idToMarketParams(Id.wrap(targetMarketId));
+        marketParams.lltv = 915000000000000000;
+        // console.log(marketParams.lltv);
         vm.prank(marketCreator.addr);
         morpho.createMarket(marketParams);
 
-        uint256 collateralPrice = IOracle(marketParams.oracle).price();
-        console.log("> collateralPrice", collateralPrice);
+        marketId = Id.unwrap(MarketParamsLib.id(marketParams));
+        MarketParams memory marketParamsOut = morpho.idToMarketParams(
+            Id.wrap(marketId)
+        );
+
+        assertEq(marketParamsOut.loanToken, marketParams.loanToken);
+        assertEq(marketParamsOut.collateralToken, marketParams.collateralToken);
+        assertEq(marketParamsOut.oracle, marketParams.oracle);
+        assertEq(marketParamsOut.irm, marketParams.irm);
+        assertEq(marketParamsOut.lltv, marketParams.lltv);
+
+        // uint256 collateralPrice = IOracle(marketParams.oracle).price();
+        // console.log("> collateralPrice", collateralPrice);
+
+        // ** Deposit liquidity
+        vm.startPrank(morphoLpProvider.addr);
+        deal(address(usdc), morphoLpProvider.addr, 10000 * 1e6);
+
+        usdc.approve(address(morpho), type(uint256).max);
+        (uint256 assets, uint256 shares) = morpho.supply(
+            morpho.idToMarketParams(Id.wrap(marketId)),
+            10000 * 1e6,
+            0,
+            morphoLpProvider.addr,
+            ""
+        );
+
+        MorphoPosition memory p = morpho.position(
+            Id.wrap(marketId),
+            morphoLpProvider.addr
+        );
+        assertEq(p.supplyShares, shares);
+        assertEq(p.borrowShares, 0);
+        assertEq(p.collateral, 0);
+        assertEq(usdc.balanceOf(morphoLpProvider.addr), 0);
+        vm.stopPrank();
     }
 }
