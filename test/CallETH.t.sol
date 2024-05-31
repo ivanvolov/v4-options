@@ -30,6 +30,7 @@ import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
 import {TestERC20} from "v4-core/test/TestERC20.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {Deployers} from "v4-core-test/utils/Deployers.sol";
+import {HookEnabledSwapRouter} from "v4-core-test/utils/HookEnabledSwapRouter.sol";
 
 import {CallETH} from "../src/CallETH.sol";
 import {PerpMath} from "../src/libraries/PerpMath.sol";
@@ -44,6 +45,7 @@ contract CallETHTest is Test, Deployers {
     CallETH hook;
 
     TestAccount alice;
+    TestAccount swapper;
     TestAccount marketCreator;
     TestAccount morphoLpProvider;
 
@@ -54,10 +56,21 @@ contract CallETHTest is Test, Deployers {
         deployFreshManagerAndRouters();
 
         alice = TestAccountLib.createTestAccount("alice");
+        swapper = TestAccountLib.createTestAccount("swapper");
 
         init_morpho_oracle();
         create_and_seed_morpho_market();
         init_hook();
+
+        vm.startPrank(alice.addr);
+        wstETH.approve(address(hook), type(uint256).max);
+        usdc.approve(address(hook), type(uint256).max);
+        vm.stopPrank();
+
+        vm.startPrank(swapper.addr);
+        wstETH.approve(address(router), type(uint256).max);
+        usdc.approve(address(router), type(uint256).max);
+        vm.stopPrank();
     }
 
     function test_morpho_blue_market() public {
@@ -102,11 +115,9 @@ contract CallETHTest is Test, Deployers {
 
     function test_deposit() public {
         vm.startPrank(alice.addr);
-
-        deal(address(wstETH), address(alice.addr), 1 ether);
-        wstETH.approve(address(hook), type(uint256).max);
-
-        (int24 tickLower, int24 tickUpper) = hook.deposit(key, 1 ether);
+        uint256 amountToDeposit = 1 ether;
+        deal(address(wstETH), address(alice.addr), amountToDeposit);
+        (int24 tickLower, int24 tickUpper) = hook.deposit(key, amountToDeposit);
         vm.stopPrank();
 
         Position.Info memory positionInfo = StateLibrary.getPosition(
@@ -117,17 +128,37 @@ contract CallETHTest is Test, Deployers {
             tickUpper,
             ""
         );
-        // assertEq(positionInfo.liquidity, 76354683210186);
-        // assertEq(wstETH.balanceOf(alice.addr), 0);
-        // assertEq(wstETH.balanceOf(address(hook)), 0);
+        assertEq(positionInfo.liquidity, 114394251255064831303);
+        assertEq(wstETH.balanceOf(alice.addr), 0);
+        assertEq(wstETH.balanceOf(address(hook)), 0);
 
-        // MorphoPosition memory p = morpho.position(marketId, address(hook));
-        // assertEq(p.supplyShares, 0);
-        // assertEq(p.borrowShares, 0);
-        // assertEq(p.collateral, 0);
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.supplyShares, 0);
+        assertEq(p.borrowShares, 0);
+        assertEq(p.collateral, amountToDeposit / 2);
+    }
+
+    function test_swap() public {
+        vm.startPrank(alice.addr);
+        uint256 amountToDeposit = 1 ether;
+        deal(address(wstETH), address(alice.addr), amountToDeposit);
+        hook.deposit(key, amountToDeposit);
+        vm.stopPrank();
+
+        vm.startPrank(swapper.addr);
+        router.swap(
+            key,
+            IPoolManager.SwapParams(false, -1 ether, SQRT_PRICE_1_1 + 1),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
+        vm.expectRevert(LimitOrder.InRange.selector);
+        vm.stopPrank();
     }
 
     // -- Helpers --
+
+    HookEnabledSwapRouter router;
 
     IMorphoChainlinkOracleV2Factory morphoOracleFactory;
     MorphoChainlinkOracleV2 morphoOracle;
@@ -136,6 +167,8 @@ contract CallETHTest is Test, Deployers {
     IMorpho morpho;
 
     function init_hook() internal {
+        router = new HookEnabledSwapRouter(manager);
+
         address hookAddress = address(
             uint160(
                 Hooks.AFTER_SWAP_FLAG |
@@ -146,12 +179,12 @@ contract CallETHTest is Test, Deployers {
         deployCodeTo("CallETH.sol", abi.encode(manager, marketId), hookAddress);
         hook = CallETH(hookAddress);
 
-        console.log("> initialPrice SQRT");
-        int24 initialTick = PerpMath.getNearestValidTick(
-            PerpMath.getTickFromPrice(2000 ether),
-            4
-        );
-        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(76012);
+        // console.log("> initialPrice SQRT");
+        // int24 initialTick = PerpMath.getNearestValidTick(
+        //     PerpMath.getTickFromPrice(2000 ether),
+        //     4
+        // );
+        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(84092);
 
         (key, ) = initPool(
             Currency.wrap(address(wstETH)),
@@ -161,27 +194,6 @@ contract CallETHTest is Test, Deployers {
             initialSQRTPrice,
             ZERO_BYTES
         );
-    }
-
-    function init_morpho_oracle() internal {
-        morphoOracleFactory = IMorphoChainlinkOracleV2Factory(
-            0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
-        );
-        morphoOracle = morphoOracleFactory.createMorphoChainlinkOracleV2(
-            IERC4626(0x0000000000000000000000000000000000000000),
-            1,
-            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-            18,
-            IERC4626(0x0000000000000000000000000000000000000000),
-            1,
-            AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46),
-            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-            6,
-            "0x"
-        );
-
-        // console.log(oracle.price());
     }
 
     function create_and_seed_morpho_market() internal {
@@ -211,8 +223,8 @@ contract CallETHTest is Test, Deployers {
         assertEq(marketParamsOut.irm, marketParams.irm);
         assertEq(marketParamsOut.lltv, marketParams.lltv);
 
-        // uint256 collateralPrice = IOracle(marketParams.oracle).price();
-        // console.log("> collateralPrice", collateralPrice);
+        uint256 collateralPrice = IOracle(marketParams.oracle).price();
+        console.log("> collateralPrice", collateralPrice);
 
         // ** Deposit liquidity
         vm.startPrank(morphoLpProvider.addr);
@@ -236,5 +248,25 @@ contract CallETHTest is Test, Deployers {
         assertEq(p.collateral, 0);
         assertEq(usdc.balanceOf(morphoLpProvider.addr), 0);
         vm.stopPrank();
+    }
+
+    function init_morpho_oracle() internal {
+        // morphoOracleFactory = IMorphoChainlinkOracleV2Factory(
+        //     0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
+        // );
+        // morphoOracle = morphoOracleFactory.createMorphoChainlinkOracleV2(
+        //     IERC4626(0x0000000000000000000000000000000000000000),
+        //     1,
+        //     AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+        //     AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+        //     18,
+        //     IERC4626(0x0000000000000000000000000000000000000000),
+        //     1,
+        //     AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46),
+        //     AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+        //     6,
+        //     "0x"
+        // );
+        // console.log(oracle.price());
     }
 }

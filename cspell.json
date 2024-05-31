@@ -1,0 +1,26 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "dictionaries": [
+    "solidity",
+    "defi",
+    "softwareTerms",
+    "typescript",
+    "node",
+    "en_US",
+    "filetypes"
+  ],
+  "dictionaryDefinitions": [
+    { "name": "solidity", "path": "./cspell.dict/solidity.txt" },
+    { "name": "defi", "path": "./cspell.dict/defi.txt" }
+  ],
+  "words": ["calros"],
+  "ignorePaths": [
+    "./cspell.dict/**",
+    "./node_modules/**",
+    "./lib/**",
+    "cspell.json"
+  ],
+  "import": [],
+  "enabled": true
+}

@@ -27,14 +27,16 @@ library PerpMath {
         return flooredTick;
     }
 
-    function getTickFromPrice(uint256 price) internal view returns (int24) {
-        // console.log("> getTickFromPrice");
-        // console.log("> price", price);
-        // console.log(uint256(1e30).div(price));
-        // console.log(PRBMathUD60x18.ln(uint256(1e30).div(price)));
-        // console.log(
-        //     PRBMathUD60x18.ln(uint256(1e30).div(price)).div(99995000333297)
-        // );
+    function getTickLower(
+        int24 tick,
+        int24 tickSpacing
+    ) internal pure returns (int24) {
+        int24 compressed = tick / tickSpacing;
+        if (tick < 0 && tick % tickSpacing != 0) compressed--; // round towards negative infinity
+        return compressed * tickSpacing;
+    }
+
+    function getTickFromPrice(uint256 price) internal pure returns (int24) {
         return
             MathHelpersLib.toInt24(
                 int256(

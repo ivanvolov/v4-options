@@ -40,6 +40,16 @@ contract CallETH is BaseHook {
     IMorpho public constant morpho =
         IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
+    mapping(PoolId => int24) public tickLowerLasts;
+
+    function getTickLowerLast(PoolId poolId) public view returns (int24) {
+        return tickLowerLasts[poolId];
+    }
+
+    function setTickLowerLast(PoolId poolId, int24 tickLower) private {
+        tickLowerLasts[poolId] = tickLower;
+    }
+
     constructor(IPoolManager poolManager, Id _marketId) BaseHook(poolManager) {
         marketId = _marketId;
     }
@@ -73,33 +83,34 @@ contract CallETH is BaseHook {
         address,
         PoolKey calldata key,
         uint160,
-        int24,
+        int24 tick,
         bytes calldata
     ) external override returns (bytes4) {
         console.log("> afterInitialize");
-        IERC20Minimal(Currency.unwrap(key.currency1)).approve(
+        IERC20Minimal(Currency.unwrap(key.currency0)).approve(
             address(morpho),
             type(uint256).max
+        );
+        setTickLowerLast(
+            key.toId(),
+            PerpMath.getTickLower(tick, key.tickSpacing)
         );
 
         return CallETH.afterInitialize.selector;
     }
 
-    function getTick(PoolKey calldata key) public view returns (int24) {
-        (, int24 currentTick, , ) = StateLibrary.getSlot0(
-            poolManager,
-            key.toId()
-        );
+    function getCurrentTick(PoolId poolId) public view returns (int24) {
+        (, int24 currentTick, , ) = StateLibrary.getSlot0(poolManager, poolId);
         return currentTick;
     }
 
     // Disable adding liquidity through the PM
     function beforeAddLiquidity(
-        address sender,
+        address,
         PoolKey calldata,
         IPoolManager.ModifyLiquidityParams calldata,
         bytes calldata
-    ) external view override returns (bytes4) {
+    ) external pure override returns (bytes4) {
         revert AddLiquidityThroughHook();
     }
 
@@ -114,16 +125,11 @@ contract CallETH is BaseHook {
             amount
         );
 
-        console.log("wstETH balance %s", IERC20Minimal(Currency.unwrap(key.currency0)).balanceOf(address(this)));
-        console.log("!");
-        tickLower = getTick(key);
+        tickLower = getCurrentTick(key.toId());
         tickUpper = PerpMath.getNearestValidTick(
             PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) / 2),
             key.tickSpacing
         );
-        console.log("tickUpper %s", uint256(int256(tickUpper)));
-        console.log("tickLower %s", uint256(int256(tickLower)));
-        console.log("!");
 
         poolManager.unlock(
             abi.encodeCall(
@@ -132,19 +138,14 @@ contract CallETH is BaseHook {
             )
         );
 
-        // console.log(
-        //     IERC20Minimal(Currency.unwrap(key.currency1)).balanceOf(
-        //         address(this)
-        //     )
-        // );
-        // morpho.supplyCollateral(
-        //     morpho.idToMarketParams(marketId),
-        //     IERC20Minimal(Currency.unwrap(key.currency1)).balanceOf(
-        //         address(this)
-        //     ),
-        //     address(this),
-        //     ""
-        // );
+        morpho.supplyCollateral(
+            morpho.idToMarketParams(marketId),
+            IERC20Minimal(Currency.unwrap(key.currency0)).balanceOf(
+                address(this)
+            ),
+            address(this),
+            ""
+        );
     }
 
     function unlockDepositPlace(
@@ -154,25 +155,16 @@ contract CallETH is BaseHook {
         int24 tickUpper
     ) external selfOnly returns (bytes memory) {
         console.log("> unlockDepositPlace");
-
-        console.log(amount);
-        console.logInt(tickLower);
-        console.logInt(tickUpper);
+        // console.log(amount);
+        // console.logInt(tickLower);
+        // console.logInt(tickUpper);
 
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
-                        TickMath.getSqrtPriceAtTick(tickUpper), 
-                        TickMath.getSqrtPriceAtTick(tickLower), 
-                        amount
-                        );
-        console.log("liquidity %s", uint256(liquidity));
-   
-        int24 currentTick = getTick(key);
-        console.log("currentTick %s", uint256(int256(currentTick)));
-
-        (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(TickMath.getSqrtPriceAtTick(currentTick), TickMath.getSqrtPriceAtTick(tickLower), TickMath.getSqrtPriceAtTick(tickUpper), liquidity);
-        console.log("amount0 %s, amount1 %s", amount0, amount1);
-        
-        console.log(Currency.unwrap(key.currency0));
+            TickMath.getSqrtPriceAtTick(tickUpper),
+            TickMath.getSqrtPriceAtTick(tickLower),
+            amount
+        );
+        // console.log("liquidity %s", uint256(liquidity));
 
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
@@ -184,14 +176,13 @@ contract CallETH is BaseHook {
             }),
             ZERO_BYTES
         );
-        
-        console.log("> delta");
-        console.logInt(delta.amount0());
-        console.logInt(delta.amount1());
 
+        // console.log("> delta");
+        // console.logInt(delta.amount0());
+        // console.logInt(delta.amount1());
 
         if (delta.amount0() < 0) {
-            //if(delta.amount0() != 0) revert InRange();
+            if (delta.amount1() != 0) revert InRange();
 
             key.currency0.settle(
                 poolManager,
@@ -202,7 +193,7 @@ contract CallETH is BaseHook {
         }
 
         if (delta.amount1() < 0) {
-            //if(delta.amount1() != 0) revert InRange();
+            if (delta.amount0() != 0) revert InRange();
 
             key.currency1.settle(
                 poolManager,
@@ -210,6 +201,45 @@ contract CallETH is BaseHook {
                 uint256(uint128(-delta.amount1())),
                 false
             );
+        }
+        return bytes("");
+    }
+
+    function afterSwap(
+        address,
+        PoolKey calldata key,
+        IPoolManager.SwapParams calldata,
+        BalanceDelta,
+        bytes calldata
+    ) external virtual override returns (bytes4, int128) {
+        console.log("> afterSwap");
+
+        (int24 tickLower, int24 lower, int24 upper) = _getCrossedTicks(
+            key.toId(),
+            key.tickSpacing
+        );
+        console.logInt(tickLower);
+        console.logInt(lower);
+        console.logInt(upper);
+        // if (lower > upper) return (LimitOrder.afterSwap.selector, 0);
+
+        setTickLowerLast(key.toId(), tickLower);
+        return (CallETH.afterSwap.selector, 0);
+    }
+
+    function _getCrossedTicks(
+        PoolId poolId,
+        int24 tickSpacing
+    ) internal view returns (int24 tickLower, int24 lower, int24 upper) {
+        tickLower = PerpMath.getTickLower(getCurrentTick(poolId), tickSpacing);
+        int24 tickLowerLast = getTickLowerLast(poolId);
+
+        if (tickLower < tickLowerLast) {
+            lower = tickLower + tickSpacing;
+            upper = tickLowerLast;
+        } else {
+            lower = tickLowerLast;
+            upper = tickLower - tickSpacing;
         }
     }
 }
