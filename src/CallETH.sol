@@ -46,9 +46,9 @@ contract CallETH is BaseHook {
         return tickLowerLasts[poolId];
     }
 
-    function setTickLowerLast(PoolId poolId, int24 tickLower) private {
-        tickLowerLasts[poolId] = tickLower;
-    }
+    // function setTickLowerLast(PoolId poolId, int24 tickLower) private {
+    //     tickLowerLasts[poolId] = tickLower;
+    // }
 
     constructor(IPoolManager poolManager, Id _marketId) BaseHook(poolManager) {
         marketId = _marketId;
@@ -91,10 +91,10 @@ contract CallETH is BaseHook {
             address(morpho),
             type(uint256).max
         );
-        setTickLowerLast(
-            key.toId(),
-            PerpMath.getTickLower(tick, key.tickSpacing)
-        );
+        // setTickLowerLast(
+        //     key.toId(),
+        //     PerpMath.getTickLower(tick, key.tickSpacing)
+        // );
 
         return CallETH.afterInitialize.selector;
     }
@@ -118,6 +118,7 @@ contract CallETH is BaseHook {
         PoolKey calldata key,
         uint256 amount
     ) external returns (int24 tickLower, int24 tickUpper) {
+        console.log("> deposit");
         if (amount == 0) revert ZeroLiquidity();
         IERC20Minimal(Currency.unwrap(key.currency0)).transferFrom(
             msg.sender,
@@ -125,11 +126,15 @@ contract CallETH is BaseHook {
             amount
         );
 
+        console.log("> Ticks");
         tickLower = getCurrentTick(key.toId());
+        console.logInt(tickLower);
+        console.log(PerpMath.getPriceFromTick(tickLower));
         tickUpper = PerpMath.getNearestValidTick(
             PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) / 2),
             key.tickSpacing
         );
+        console.logInt(tickUpper);
 
         poolManager.unlock(
             abi.encodeCall(
@@ -214,16 +219,16 @@ contract CallETH is BaseHook {
     ) external virtual override returns (bytes4, int128) {
         console.log("> afterSwap");
 
-        (int24 tickLower, int24 lower, int24 upper) = _getCrossedTicks(
-            key.toId(),
-            key.tickSpacing
-        );
-        console.logInt(tickLower);
-        console.logInt(lower);
-        console.logInt(upper);
-        // if (lower > upper) return (LimitOrder.afterSwap.selector, 0);
+        // (int24 tickLower, int24 lower, int24 upper) = _getCrossedTicks(
+        //     key.toId(),
+        //     key.tickSpacing
+        // );
+        // console.logInt(tickLower);
+        // console.logInt(lower);
+        // console.logInt(upper);
+        // // if (lower > upper) return (LimitOrder.afterSwap.selector, 0);
 
-        setTickLowerLast(key.toId(), tickLower);
+        // setTickLowerLast(key.toId(), tickLower);
         return (CallETH.afterSwap.selector, 0);
     }
 

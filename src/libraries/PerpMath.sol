@@ -46,4 +46,11 @@ library PerpMath {
                 )
             );
     }
+
+    function getTickFromPriceV2(uint256 price) internal pure returns (int24) {
+        return
+            MathHelpersLib.toInt24(
+                int256(PRBMathUD60x18.ln(price).div(99995000333297 * 1e18))
+            );
+    }
 }

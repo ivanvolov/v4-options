@@ -30,8 +30,8 @@ import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
 import {TestERC20} from "v4-core/test/TestERC20.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {Deployers} from "v4-core-test/utils/Deployers.sol";
-import {HookEnabledSwapRouter} from "v4-core-test/utils/HookEnabledSwapRouter.sol";
 
+import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
 import {CallETH} from "../src/CallETH.sol";
 import {PerpMath} from "../src/libraries/PerpMath.sol";
 
@@ -50,7 +50,7 @@ contract CallETHTest is Test, Deployers {
     TestAccount morphoLpProvider;
 
     TestERC20 wstETH;
-    TestERC20 usdc;
+    TestERC20 USDC;
 
     function setUp() public {
         deployFreshManagerAndRouters();
@@ -64,12 +64,12 @@ contract CallETHTest is Test, Deployers {
 
         vm.startPrank(alice.addr);
         wstETH.approve(address(hook), type(uint256).max);
-        usdc.approve(address(hook), type(uint256).max);
+        USDC.approve(address(hook), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
         wstETH.approve(address(router), type(uint256).max);
-        usdc.approve(address(router), type(uint256).max);
+        USDC.approve(address(router), type(uint256).max);
         vm.stopPrank();
     }
 
@@ -108,7 +108,7 @@ contract CallETHTest is Test, Deployers {
         p = morpho.position(marketId, alice.addr);
         assertEq(p.supplyShares, 0);
         assertEq(p.borrowShares, shares);
-        assertEq(usdc.balanceOf(alice.addr), borrowAmount);
+        assertEq(USDC.balanceOf(alice.addr), borrowAmount);
         assertEq(p.collateral, collateralAmount);
         vm.stopPrank();
     }
@@ -140,19 +140,26 @@ contract CallETHTest is Test, Deployers {
 
     function test_swap() public {
         vm.startPrank(alice.addr);
-        uint256 amountToDeposit = 1 ether;
+        uint256 amountToDeposit = 100 ether;
         deal(address(wstETH), address(alice.addr), amountToDeposit);
         hook.deposit(key, amountToDeposit);
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
+        // uint256 amountToSwap = 100 * 1e6;
+        // deal(address(USDC), address(swapper.addr), 10000 * 1e6); //hard to precalculate just deal a lot of USDC
+
         router.swap(
             key,
-            IPoolManager.SwapParams(false, -1 ether, SQRT_PRICE_1_1 + 1),
+            IPoolManager.SwapParams(
+                false, // USDC -> wstETH
+                int256(1 ether),
+                TickMath.MAX_SQRT_PRICE - 1 //Just don't care about sqrt prices for now
+            ),
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
-        vm.expectRevert(LimitOrder.InRange.selector);
+        vm.expectRevert(CallETH.InRange.selector);
         vm.stopPrank();
     }
 
@@ -179,16 +186,24 @@ contract CallETHTest is Test, Deployers {
         deployCodeTo("CallETH.sol", abi.encode(manager, marketId), hookAddress);
         hook = CallETH(hookAddress);
 
-        // console.log("> initialPrice SQRT");
-        // int24 initialTick = PerpMath.getNearestValidTick(
-        //     PerpMath.getTickFromPrice(2000 ether),
-        //     4
-        // );
+        console.log("> initialTick");
+        int24 initialTick = PerpMath.getNearestValidTick(
+            PerpMath.getTickFromPrice(4487 * 1e6),
+            4
+        );
+        // console.logInt(PerpMath.getTickFromPrice(4487 * 1e18));
+        // console.logInt(PerpMath.getTickFromPriceV2(4487 * 1e18));
+        // console.logInt(PerpMath.getTickFromPrice(4487 * 1e6));
+        // console.logInt(PerpMath.getTickFromPriceV2(4487 * 1e6));
+        // console.log("> should be 84092");
+        // console.logInt(initialTick);
+        // assertEq(initialTick, 84092);
         uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(84092);
+        // uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(-192232);
 
         (key, ) = initPool(
             Currency.wrap(address(wstETH)),
-            Currency.wrap(address(usdc)),
+            Currency.wrap(address(USDC)),
             hook,
             200,
             initialSQRTPrice,
@@ -201,7 +216,9 @@ contract CallETHTest is Test, Deployers {
         morphoLpProvider = TestAccountLib.createTestAccount("morphoLpProvider");
 
         wstETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-        usdc = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        vm.label(address(wstETH), "wstETH");
+        USDC = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        vm.label(address(USDC), "USDC");
 
         morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
@@ -228,9 +245,9 @@ contract CallETHTest is Test, Deployers {
 
         // ** Deposit liquidity
         vm.startPrank(morphoLpProvider.addr);
-        deal(address(usdc), morphoLpProvider.addr, 10000 * 1e6);
+        deal(address(USDC), morphoLpProvider.addr, 10000 * 1e6);
 
-        usdc.approve(address(morpho), type(uint256).max);
+        USDC.approve(address(morpho), type(uint256).max);
         (, uint256 shares) = morpho.supply(
             morpho.idToMarketParams(marketId),
             10000 * 1e6,
@@ -246,7 +263,7 @@ contract CallETHTest is Test, Deployers {
         assertEq(p.supplyShares, shares);
         assertEq(p.borrowShares, 0);
         assertEq(p.collateral, 0);
-        assertEq(usdc.balanceOf(morphoLpProvider.addr), 0);
+        assertEq(USDC.balanceOf(morphoLpProvider.addr), 0);
         vm.stopPrank();
     }
 
