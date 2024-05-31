@@ -146,8 +146,7 @@ contract CallETHTest is Test, Deployers {
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
-        // uint256 amountToSwap = 100 * 1e6;
-        // deal(address(USDC), address(swapper.addr), 10000 * 1e6); //hard to precalculate just deal a lot of USDC
+        deal(address(USDC), address(swapper.addr), 4578766600); //hard to precalculate just deal a lot of USDC
 
         router.swap(
             key,
@@ -159,7 +158,8 @@ contract CallETHTest is Test, Deployers {
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
-        vm.expectRevert(CallETH.InRange.selector);
+        assertEq(wstETH.balanceOf(swapper.addr), 1 ether);
+        assertEq(USDC.balanceOf(swapper.addr), 0);
         vm.stopPrank();
     }
 
@@ -186,20 +186,10 @@ contract CallETHTest is Test, Deployers {
         deployCodeTo("CallETH.sol", abi.encode(manager, marketId), hookAddress);
         hook = CallETH(hookAddress);
 
-        console.log("> initialTick");
-        int24 initialTick = PerpMath.getNearestValidTick(
-            PerpMath.getTickFromPrice(4487 * 1e6),
-            4
-        );
-        // console.logInt(PerpMath.getTickFromPrice(4487 * 1e18));
-        // console.logInt(PerpMath.getTickFromPriceV2(4487 * 1e18));
-        // console.logInt(PerpMath.getTickFromPrice(4487 * 1e6));
-        // console.logInt(PerpMath.getTickFromPriceV2(4487 * 1e6));
-        // console.log("> should be 84092");
-        // console.logInt(initialTick);
-        // assertEq(initialTick, 84092);
-        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(84092);
-        // uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(-192232);
+        console.log("> initialTick: -192232");
+        // int24 initialTick = PerpMath.getNearestValidTick(-96690, 4);
+        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(-192232);
+        console.log("> initialSQRTPrice", uint256(initialSQRTPrice));
 
         (key, ) = initPool(
             Currency.wrap(address(wstETH)),
