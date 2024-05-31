@@ -114,14 +114,15 @@ contract CallETH is BaseHook {
             amount
         );
 
+        console.log("wstETH balance %s", IERC20Minimal(Currency.unwrap(key.currency0)).balanceOf(address(this)));
         console.log("!");
-        tickUpper = getTick(key);
-        console.logInt(tickUpper);
-        console.log(PerpMath.getPriceFromTick(tickUpper));
-        tickLower = PerpMath.getNearestValidTick(
-            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickUpper) * 2),
+        tickLower = getTick(key);
+        tickUpper = PerpMath.getNearestValidTick(
+            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) / 2),
             key.tickSpacing
         );
+        console.log("tickUpper %s", uint256(int256(tickUpper)));
+        console.log("tickLower %s", uint256(int256(tickLower)));
         console.log("!");
 
         poolManager.unlock(
@@ -157,30 +158,40 @@ contract CallETH is BaseHook {
         console.log(amount);
         console.logInt(tickLower);
         console.logInt(tickUpper);
+
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
+                        TickMath.getSqrtPriceAtTick(tickUpper), 
+                        TickMath.getSqrtPriceAtTick(tickLower), 
+                        amount
+                        );
+        console.log("liquidity %s", uint256(liquidity));
+   
+        int24 currentTick = getTick(key);
+        console.log("currentTick %s", uint256(int256(currentTick)));
+
+        (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(TickMath.getSqrtPriceAtTick(currentTick), TickMath.getSqrtPriceAtTick(tickLower), TickMath.getSqrtPriceAtTick(tickUpper), liquidity);
+        console.log("amount0 %s, amount1 %s", amount0, amount1);
+        
+        console.log(Currency.unwrap(key.currency0));
+
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
             IPoolManager.ModifyLiquidityParams({
                 tickLower: tickLower,
                 tickUpper: tickUpper,
-                liquidityDelta: int128(
-                    LiquidityAmounts.getLiquidityForAmount0( //TODO: This is so fucker up
-                        TickMath.getSqrtPriceAtTick(tickLower),
-                        TickMath.getSqrtPriceAtTick(tickUpper),
-                        amount
-                    )
-                ),
+                liquidityDelta: int128(liquidity),
                 salt: ""
             }),
             ZERO_BYTES
         );
-
+        
         console.log("> delta");
         console.logInt(delta.amount0());
         console.logInt(delta.amount1());
 
+
         if (delta.amount0() < 0) {
-            console.log("> I want to get wstETH");
-            if (delta.amount1() != 0) revert InRange();
+            //if(delta.amount0() != 0) revert InRange();
 
             key.currency0.settle(
                 poolManager,
@@ -188,9 +199,10 @@ contract CallETH is BaseHook {
                 uint256(uint128(-delta.amount0())),
                 false
             );
-        } else {
-            console.log("> I want to get usdc");
-            if (delta.amount0() != 0) revert InRange();
+        }
+
+        if (delta.amount1() < 0) {
+            //if(delta.amount1() != 0) revert InRange();
 
             key.currency1.settle(
                 poolManager,

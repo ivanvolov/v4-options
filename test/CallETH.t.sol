@@ -151,7 +151,7 @@ contract CallETHTest is Test, Deployers {
             PerpMath.getTickFromPrice(2000 ether),
             4
         );
-        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(initialTick);
+        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(76012);
 
         (key, ) = initPool(
             Currency.wrap(address(wstETH)),
