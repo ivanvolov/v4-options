@@ -10,3 +10,6 @@
 [submodule "lib/morpho-blue-oracles"]
 	path = lib/morpho-blue-oracles
 	url = https://github.com/morpho-org/morpho-blue-oracles
+[submodule "lib/v4-periphery"]
+	path = lib/v4-periphery
+	url = https://github.com/Uniswap/v4-periphery
