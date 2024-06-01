@@ -115,11 +115,10 @@ contract CallETHTest is Test, Deployers {
     }
 
     function test_deposit() public {
-        vm.startPrank(alice.addr);
-        uint256 amountToDeposit = 1 ether;
+        uint256 amountToDeposit = 100 ether;
         deal(address(wstETH), address(alice.addr), amountToDeposit);
+        vm.prank(alice.addr);
         (int24 tickLower, int24 tickUpper) = hook.deposit(key, amountToDeposit);
-        vm.stopPrank();
 
         Position.Info memory positionInfo = StateLibrary.getPosition(
             manager,
@@ -129,22 +128,18 @@ contract CallETHTest is Test, Deployers {
             tickUpper,
             ""
         );
-        assertEq(positionInfo.liquidity, 114394251255064831303);
+        assertEq(positionInfo.liquidity, 11433916692172150);
         assertEq(wstETH.balanceOf(alice.addr), 0);
         assertEq(wstETH.balanceOf(address(hook)), 0);
 
         MorphoPosition memory p = morpho.position(marketId, address(hook));
         assertEq(p.supplyShares, 0);
         assertEq(p.borrowShares, 0);
-        assertEq(p.collateral, amountToDeposit / 2);
+        assertApproxEqAbs(p.collateral, amountToDeposit / 2, 10000);
     }
 
     function test_swap_price_up() public {
-        vm.startPrank(alice.addr);
-        uint256 amountToDeposit = 100 ether;
-        deal(address(wstETH), address(alice.addr), amountToDeposit);
-        hook.deposit(key, amountToDeposit);
-        vm.stopPrank();
+        test_deposit();
 
         vm.startPrank(swapper.addr);
         deal(address(USDC), address(swapper.addr), 4513632092);

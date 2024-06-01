@@ -214,14 +214,6 @@ contract CallETH is BaseHook {
         return bytes("");
     }
 
-    ISwapRouter immutable swapRouter =
-        ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-
-    address public constant poolWethUsdc =
-        0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640;
-    address public constant poolUsdcOSQTH =
-        0x82c427AdFDf2d245Ec51D8046b41c4ee87F0d29C;
-
     function afterSwap(
         address,
         PoolKey calldata key,
@@ -234,7 +226,7 @@ contract CallETH is BaseHook {
         int24 tick = getCurrentTick(key.toId());
 
         if (tick > getTickLast(key.toId())) {
-            // console.log(">> price go up...");
+            console.log(">> price go up...");
             // console.logInt(deltas.amount0());
             // console.logInt(deltas.amount1());
 
@@ -251,17 +243,8 @@ contract CallETH is BaseHook {
             );
             swapWETH_OSQTH(amountOut);
         } else if (tick < getTickLast(key.toId())) {
-            // console.log(">> price go down...");
+            console.log(">> price go down...");
         }
-
-        // (int24 tickLower, int24 lower, int24 upper) = _getCrossedTicks(
-        //     key.toId(),
-        //     key.tickSpacing
-        // );
-        // console.logInt(tickLower);
-        // console.logInt(lower);
-        // console.logInt(upper);
-        // // if (lower > upper) return (LimitOrder.afterSwap.selector, 0);
 
         setTickLast(key.toId(), tick);
         return (CallETH.afterSwap.selector, 0);
@@ -269,8 +252,11 @@ contract CallETH is BaseHook {
 
     // --- Helpers ---
 
+    ISwapRouter immutable swapRouter =
+        ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+
+    // ** WETH -> oSQTH
     function swapWETH_OSQTH(uint256 amount) internal returns (uint256) {
-        // WETH -> oSQTH
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: address(WETH),
@@ -285,8 +271,8 @@ contract CallETH is BaseHook {
         return swapRouter.exactInputSingle(params);
     }
 
+    // ** USDC -> WETH
     function swapUSDC_WETH(uint256 amount) internal returns (uint256) {
-        // USDC -> WETH
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: address(USDC),
