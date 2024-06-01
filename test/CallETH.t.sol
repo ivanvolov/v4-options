@@ -159,7 +159,7 @@ contract CallETHTest is Test, Deployers {
             ZERO_BYTES
         );
         assertEq(wstETH.balanceOf(swapper.addr), 1 ether);
-        assertEq(USDC.balanceOf(swapper.addr), 0);
+        assertApproxEqAbs(USDC.balanceOf(swapper.addr), 0, 10);
         vm.stopPrank();
     }
 

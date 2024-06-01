@@ -63,9 +63,15 @@ library PerpMath {
     }
 
     function getTickFromPriceV2(uint256 price) internal view returns (int24) {
+        console.log("> getTickFromPriceV2");
         console.log("price", price);
         uint256 priceZeroForOne = price.sqrt();
-        console.log("priceZeroForOne", priceZeroForOne);
+        console.log("sqrtPrice", priceZeroForOne);
+        console.log("sqrtPriceX96", priceZeroForOne * 2 ** 96);
+        console.logInt(
+            TickMath.getTickAtSqrtPrice(uint160(priceZeroForOne * 2 ** 96))
+        );
+        console.log("~");
         return
             MathHelpersLib.toInt24(
                 int256(PRBMathUD60x18.ln(price).div(99995000333297 * 1e18))
