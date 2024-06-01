@@ -139,10 +139,11 @@ contract CallETH is BaseHook {
         // );
         // console.log("> !");
         // TODO: ! depending on signs and digitals it should change. Just check using formulas.
-        tickUpper = PerpMath.getNearestValidTick(
-            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2), //!: Even don't ask why
-            key.tickSpacing
-        );
+        // tickUpper = PerpMath.getNearestValidTick(
+        //     PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2), //!: Even don't ask why
+        //     key.tickSpacing
+        // );
+        tickUpper = -185296;
         console.log("> Ticks, lower/upper");
         console.logInt(tickLower);
         console.logInt(tickUpper);
