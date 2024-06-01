@@ -20,17 +20,6 @@ library PerpMath {
         return (sqrtPriceX96.div(2 ** 96)).mul(sqrtPriceX96.div(2 ** 96));
     }
 
-    function getNearestValidTick(
-        int24 tick,
-        int24 tickSpacing
-    ) internal pure returns (int24) {
-        int24 flooredTick = (tick / tickSpacing) * tickSpacing;
-        if (tick < 0 && tick % tickSpacing != 0) {
-            flooredTick -= tickSpacing;
-        }
-        return flooredTick;
-    }
-
     // ---- Math.log(2*4486*1e-12)/Math.log(1.0001)
     // ---- (Math.log(2*4486*1e-12*1e18)-Math.log(1e18))/Math.log(1.0001)
     function getTickFromPrice(uint256 price) internal view returns (int24) {
@@ -51,7 +40,7 @@ library PerpMath {
             );
     }
 
-    function getTickLower(
+    function tickRoundDown(
         int24 tick,
         int24 tickSpacing
     ) internal pure returns (int24) {

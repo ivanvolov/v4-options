@@ -40,15 +40,15 @@ contract CallETH is BaseHook {
     IMorpho public constant morpho =
         IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
-    mapping(PoolId => int24) public tickLowerLasts;
+    mapping(PoolId => int24) public lastTick;
 
-    function getTickLowerLast(PoolId poolId) public view returns (int24) {
-        return tickLowerLasts[poolId];
+    function getTickLast(PoolId poolId) public view returns (int24) {
+        return lastTick[poolId];
     }
 
-    // function setTickLowerLast(PoolId poolId, int24 tickLower) private {
-    //     tickLowerLasts[poolId] = tickLower;
-    // }
+    function setTickLast(PoolId poolId, int24 _tick) private {
+        lastTick[poolId] = _tick;
+    }
 
     constructor(IPoolManager poolManager, Id _marketId) BaseHook(poolManager) {
         marketId = _marketId;
@@ -91,10 +91,7 @@ contract CallETH is BaseHook {
             address(morpho),
             type(uint256).max
         );
-        // setTickLowerLast(
-        //     key.toId(),
-        //     PerpMath.getTickLower(tick, key.tickSpacing)
-        // );
+        setTickLast(key.toId(), tick);
 
         return CallETH.afterInitialize.selector;
     }
@@ -128,15 +125,15 @@ contract CallETH is BaseHook {
 
         tickLower = getCurrentTick(key.toId());
         // console.log("Price from tick %s", PerpMath.getPriceFromTick(tickLower));
-        tickUpper = PerpMath.getNearestValidTick(
+        tickUpper = PerpMath.tickRoundDown(
             PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2),
             key.tickSpacing
         );
         // console.logInt(tickUpper);
         // tickUpper = -185296;
-        // console.log("> Ticks, lower/upper");
-        // console.logInt(tickLower);
-        // console.logInt(tickUpper);
+        console.log("> Ticks, lower/upper");
+        console.logInt(tickLower);
+        console.logInt(tickUpper);
 
         poolManager.unlock(
             abi.encodeCall(
@@ -216,10 +213,26 @@ contract CallETH is BaseHook {
         address,
         PoolKey calldata key,
         IPoolManager.SwapParams calldata,
-        BalanceDelta,
+        BalanceDelta deltas,
         bytes calldata
     ) external virtual override returns (bytes4, int128) {
         console.log("> afterSwap");
+
+        int24 tick = getCurrentTick(key.toId());
+
+        if (tick > getTickLast(key.toId())) {
+            console.log(">> price go brrrrrrr!");
+            console.logInt(deltas.amount0());
+            console.logInt(deltas.amount1());
+
+            morpho.borrow(
+                morpho.idToMarketParams(marketId),
+                uint256(int256(-deltas.amount1())),
+                0,
+                address(this),
+                address(this)
+            );
+        }
 
         // (int24 tickLower, int24 lower, int24 upper) = _getCrossedTicks(
         //     key.toId(),
@@ -230,23 +243,7 @@ contract CallETH is BaseHook {
         // console.logInt(upper);
         // // if (lower > upper) return (LimitOrder.afterSwap.selector, 0);
 
-        // setTickLowerLast(key.toId(), tickLower);
+        setTickLast(key.toId(), tick);
         return (CallETH.afterSwap.selector, 0);
-    }
-
-    function _getCrossedTicks(
-        PoolId poolId,
-        int24 tickSpacing
-    ) internal view returns (int24 tickLower, int24 lower, int24 upper) {
-        tickLower = PerpMath.getTickLower(getCurrentTick(poolId), tickSpacing);
-        int24 tickLowerLast = getTickLowerLast(poolId);
-
-        if (tickLower < tickLowerLast) {
-            lower = tickLower + tickSpacing;
-            upper = tickLowerLast;
-        } else {
-            lower = tickLowerLast;
-            upper = tickLower - tickSpacing;
-        }
     }
 }

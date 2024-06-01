@@ -161,6 +161,8 @@ contract CallETHTest is Test, Deployers {
         assertEq(wstETH.balanceOf(swapper.addr), 1 ether);
         assertApproxEqAbs(USDC.balanceOf(swapper.addr), 0, 10);
         vm.stopPrank();
+
+        assertApproxEqAbs(USDC.balanceOf(address(hook)), 4513632092, 0);
     }
 
     // -- Helpers --
@@ -170,6 +172,9 @@ contract CallETHTest is Test, Deployers {
     IMorphoChainlinkOracleV2Factory morphoOracleFactory;
     MorphoChainlinkOracleV2 morphoOracle;
     Id marketId;
+
+    bytes32 targetMarketId =
+        0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc;
 
     IMorpho morpho;
 
@@ -186,10 +191,10 @@ contract CallETHTest is Test, Deployers {
         deployCodeTo("CallETH.sol", abi.encode(manager, marketId), hookAddress);
         hook = CallETH(hookAddress);
 
-        console.log("> initialTick: -192232");
+        // console.log("> initialTick: -192232");
         // int24 initialTick = PerpMath.getNearestValidTick(-96690, 4);
         uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(-192232);
-        console.log("> initialSQRTPrice", uint256(initialSQRTPrice));
+        // console.log("> initialSQRTPrice", uint256(initialSQRTPrice));
 
         (key, ) = initPool(
             Currency.wrap(address(wstETH)),
@@ -212,7 +217,6 @@ contract CallETHTest is Test, Deployers {
 
         morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
-        bytes32 targetMarketId = 0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc;
         MarketParams memory marketParams = morpho.idToMarketParams(
             Id.wrap(targetMarketId)
         );
@@ -230,8 +234,8 @@ contract CallETHTest is Test, Deployers {
         assertEq(marketParamsOut.irm, marketParams.irm);
         assertEq(marketParamsOut.lltv, marketParams.lltv);
 
-        uint256 collateralPrice = IOracle(marketParams.oracle).price();
-        console.log("> collateralPrice", collateralPrice);
+        // uint256 collateralPrice = IOracle(marketParams.oracle).price();
+        // console.log("> collateralPrice", collateralPrice);
 
         // ** Deposit liquidity
         vm.startPrank(morphoLpProvider.addr);
@@ -255,6 +259,15 @@ contract CallETHTest is Test, Deployers {
         assertEq(p.collateral, 0);
         assertEq(USDC.balanceOf(morphoLpProvider.addr), 0);
         vm.stopPrank();
+    }
+
+    function getChainlinkPrice() internal view returns (int256) {
+        MarketParams memory marketParams = morpho.idToMarketParams(
+            Id.wrap(targetMarketId)
+        );
+
+        uint256 collateralPrice = IOracle(marketParams.oracle).price();
+        console.log("> collateralPrice", collateralPrice);
     }
 
     function init_morpho_oracle() internal {
