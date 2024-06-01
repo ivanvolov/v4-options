@@ -51,6 +51,7 @@ contract CallETHTest is Test, Deployers {
 
     TestERC20 wstETH;
     TestERC20 USDC;
+    TestERC20 oSQTH;
 
     function setUp() public {
         deployFreshManagerAndRouters();
@@ -138,7 +139,7 @@ contract CallETHTest is Test, Deployers {
         assertEq(p.collateral, amountToDeposit / 2);
     }
 
-    function test_swap() public {
+    function test_swap_price_up() public {
         vm.startPrank(alice.addr);
         uint256 amountToDeposit = 100 ether;
         deal(address(wstETH), address(alice.addr), amountToDeposit);
@@ -146,7 +147,7 @@ contract CallETHTest is Test, Deployers {
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
-        deal(address(USDC), address(swapper.addr), 4513632092); //hard to precalculate just deal a lot of USDC
+        deal(address(USDC), address(swapper.addr), 4513632092);
 
         router.swap(
             key,
@@ -158,11 +159,40 @@ contract CallETHTest is Test, Deployers {
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
-        assertEq(wstETH.balanceOf(swapper.addr), 1 ether);
+        assertApproxEqAbs(wstETH.balanceOf(swapper.addr), 1 ether, 10);
         assertApproxEqAbs(USDC.balanceOf(swapper.addr), 0, 10);
         vm.stopPrank();
 
-        assertApproxEqAbs(USDC.balanceOf(address(hook)), 4513632092, 0);
+        assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
+        assertApproxEqAbs(
+            oSQTH.balanceOf(address(hook)),
+            16851686274526807531,
+            10
+        );
+    }
+
+    function test_swap_price_up_then_down() public {
+        test_swap_price_up();
+
+        vm.startPrank(swapper.addr);
+        router.swap(
+            key,
+            IPoolManager.SwapParams(
+                true, // wstETH -> USDC
+                4513632092 / 2,
+                TickMath.MIN_SQRT_PRICE + 1 //Just don't care about sqrt prices for now
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
+        vm.stopPrank();
+
+        assertApproxEqAbs(
+            wstETH.balanceOf(swapper.addr),
+            501269034773216656,
+            10
+        );
+        assertApproxEqAbs(USDC.balanceOf(swapper.addr), 4513632092 / 2, 10);
     }
 
     // -- Helpers --
@@ -214,6 +244,8 @@ contract CallETHTest is Test, Deployers {
         vm.label(address(wstETH), "wstETH");
         USDC = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
         vm.label(address(USDC), "USDC");
+        oSQTH = TestERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
+        vm.label(address(oSQTH), "oSQTH");
 
         morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
