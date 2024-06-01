@@ -146,7 +146,7 @@ contract CallETHTest is Test, Deployers {
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
-        deal(address(USDC), address(swapper.addr), 4513644931); //hard to precalculate just deal a lot of USDC
+        deal(address(USDC), address(swapper.addr), 4513632092); //hard to precalculate just deal a lot of USDC
 
         router.swap(
             key,

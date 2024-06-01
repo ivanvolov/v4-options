@@ -127,26 +127,16 @@ contract CallETH is BaseHook {
         );
 
         tickLower = getCurrentTick(key.toId());
-
         // console.log("Price from tick %s", PerpMath.getPriceFromTick(tickLower));
-        // console.log(
-        //     "Price from tick * 2 %s",
-        //     PerpMath.getPriceFromTick(tickLower) * 2
-        // );
-        // console.log("> !");
-        // console.logInt(
-        //     PerpMath.getTickFromPriceV2(PerpMath.getPriceFromTick(tickLower))
-        // );
-        // console.log("> !");
-        // TODO: ! depending on signs and digitals it should change. Just check using formulas.
-        // tickUpper = PerpMath.getNearestValidTick(
-        //     PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2), //!: Even don't ask why
-        //     key.tickSpacing
-        // );
-        tickUpper = -185296;
-        console.log("> Ticks, lower/upper");
-        console.logInt(tickLower);
-        console.logInt(tickUpper);
+        tickUpper = PerpMath.getNearestValidTick(
+            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2),
+            key.tickSpacing
+        );
+        // console.logInt(tickUpper);
+        // tickUpper = -185296;
+        // console.log("> Ticks, lower/upper");
+        // console.logInt(tickLower);
+        // console.logInt(tickUpper);
 
         poolManager.unlock(
             abi.encodeCall(
