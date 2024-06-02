@@ -36,6 +36,8 @@ contract CallETH is BaseHook {
 
     error InRange();
 
+    error NoSwapWillOccur();
+
     IERC20 wstETH = IERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
     IERC20 WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
@@ -95,14 +97,21 @@ contract CallETH is BaseHook {
         bytes calldata
     ) external override returns (bytes4) {
         console.log("> afterInitialize");
+
         USDC.approve(address(swapRouter), type(uint256).max);
+        WETH.approve(address(swapRouter), type(uint256).max);
         wstETH.approve(address(swapRouter), type(uint256).max);
         oSQTH.approve(address(swapRouter), type(uint256).max);
-        WETH.approve(address(swapRouter), type(uint256).max);
+
         IERC20(Currency.unwrap(key.currency0)).approve(
             address(morpho),
             type(uint256).max
         );
+        IERC20(Currency.unwrap(key.currency1)).approve(
+            address(morpho),
+            type(uint256).max
+        );
+
         setTickLast(key.toId(), tick);
 
         return CallETH.afterInitialize.selector;
@@ -222,6 +231,8 @@ contract CallETH is BaseHook {
         bytes calldata
     ) external virtual override returns (bytes4, int128) {
         console.log(">> afterSwap");
+        if (deltas.amount0() == 0 && deltas.amount1() == 0)
+            revert NoSwapWillOccur();
 
         int24 tick = getCurrentTick(key.toId());
 
@@ -244,6 +255,18 @@ contract CallETH is BaseHook {
             swapWETH_OSQTH(amountOut);
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
+            // console.logInt(deltas.amount0());
+            // console.logInt(deltas.amount1());
+
+            swapOSQTH_WETH_USDC(uint256(int256(deltas.amount1())));
+
+            morpho.repay(
+                morpho.idToMarketParams(marketId),
+                uint256(int256(deltas.amount1())),
+                0,
+                address(this),
+                ""
+            );
         }
 
         setTickLast(key.toId(), tick);
@@ -256,7 +279,7 @@ contract CallETH is BaseHook {
         ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
     // ** WETH -> oSQTH
-    function swapWETH_OSQTH(uint256 amount) internal returns (uint256) {
+    function swapWETH_OSQTH(uint256 amountIn) internal returns (uint256) {
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: address(WETH),
@@ -264,7 +287,7 @@ contract CallETH is BaseHook {
                 fee: 3000,
                 recipient: address(this),
                 deadline: block.timestamp,
-                amountIn: amount,
+                amountIn: amountIn,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             });
@@ -272,7 +295,7 @@ contract CallETH is BaseHook {
     }
 
     // ** USDC -> WETH
-    function swapUSDC_WETH(uint256 amount) internal returns (uint256) {
+    function swapUSDC_WETH(uint256 amountIn) internal returns (uint256) {
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: address(USDC),
@@ -280,11 +303,33 @@ contract CallETH is BaseHook {
                 fee: 500,
                 recipient: address(this),
                 deadline: block.timestamp,
-                amountIn: amount,
+                amountIn: amountIn,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             });
         return swapRouter.exactInputSingle(params);
+    }
+
+    // ** oSQTH -> WETH -> USDC
+    function swapOSQTH_WETH_USDC(uint256 amountOut) internal returns (uint256) {
+        bytes memory path = abi.encodePacked(
+            address(USDC),
+            uint24(500),
+            address(WETH),
+            uint24(3000),
+            address(oSQTH)
+        );
+
+        ISwapRouter.ExactOutputParams memory params = ISwapRouter
+            .ExactOutputParams({
+                path: path,
+                recipient: address(this),
+                deadline: block.timestamp,
+                amountOut: amountOut,
+                amountInMaximum: type(uint256).max
+            });
+
+        return swapRouter.exactOutput(params);
     }
 
     function getCurrentTick(PoolId poolId) public view returns (int24) {

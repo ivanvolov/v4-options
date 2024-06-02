@@ -130,7 +130,10 @@ contract CallETHTest is Test, Deployers {
         );
         assertEq(positionInfo.liquidity, 11433916692172150);
         assertEq(wstETH.balanceOf(alice.addr), 0);
+        assertEq(USDC.balanceOf(alice.addr), 0);
+
         assertEq(wstETH.balanceOf(address(hook)), 0);
+        assertEq(USDC.balanceOf(address(hook)), 0);
 
         MorphoPosition memory p = morpho.position(marketId, address(hook));
         assertEq(p.supplyShares, 0);
@@ -138,25 +141,42 @@ contract CallETHTest is Test, Deployers {
         assertApproxEqAbs(p.collateral, amountToDeposit / 2, 10000);
     }
 
+    function test_swap_price_down_revert() public {
+        test_deposit();
+
+        deal(address(wstETH), address(swapper.addr), 1 ether);
+
+        vm.prank(swapper.addr);
+        vm.expectRevert(CallETH.NoSwapWillOccur.selector);
+        router.swap(
+            key,
+            IPoolManager.SwapParams(
+                true, // wstETH -> USDC
+                int256(1 ether),
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
+    }
+
     function test_swap_price_up() public {
         test_deposit();
 
-        vm.startPrank(swapper.addr);
         deal(address(USDC), address(swapper.addr), 4513632092);
-
+        vm.prank(swapper.addr);
         router.swap(
             key,
             IPoolManager.SwapParams(
                 false, // USDC -> wstETH
                 int256(1 ether),
-                TickMath.MAX_SQRT_PRICE - 1 //Just don't care about sqrt prices for now
+                TickMath.MAX_SQRT_PRICE - 1
             ),
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
         assertApproxEqAbs(wstETH.balanceOf(swapper.addr), 1 ether, 10);
         assertApproxEqAbs(USDC.balanceOf(swapper.addr), 0, 10);
-        vm.stopPrank();
 
         assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
         assertApproxEqAbs(
@@ -169,18 +189,17 @@ contract CallETHTest is Test, Deployers {
     function test_swap_price_up_then_down() public {
         test_swap_price_up();
 
-        vm.startPrank(swapper.addr);
+        vm.prank(swapper.addr);
         router.swap(
             key,
             IPoolManager.SwapParams(
                 true, // wstETH -> USDC
                 4513632092 / 2,
-                TickMath.MIN_SQRT_PRICE + 1 //Just don't care about sqrt prices for now
+                TickMath.MIN_SQRT_PRICE + 1
             ),
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
-        vm.stopPrank();
 
         assertApproxEqAbs(
             wstETH.balanceOf(swapper.addr),
@@ -188,6 +207,13 @@ contract CallETHTest is Test, Deployers {
             10
         );
         assertApproxEqAbs(USDC.balanceOf(swapper.addr), 4513632092 / 2, 10);
+
+        assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
+        assertApproxEqAbs(
+            oSQTH.balanceOf(address(hook)),
+            8389745616890331647,
+            10
+        );
     }
 
     // -- Helpers --
