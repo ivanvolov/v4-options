@@ -216,6 +216,36 @@ contract CallETHTest is Test, Deployers {
         );
     }
 
+    function test_swap_price_up_then_withdraw() public {
+        test_swap_price_up();
+
+        vm.prank(swapper.addr);
+        router.swap(
+            key,
+            IPoolManager.SwapParams(
+                true, // wstETH -> USDC
+                4513632092 / 2,
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
+
+        assertApproxEqAbs(
+            wstETH.balanceOf(swapper.addr),
+            501269034773216656,
+            10
+        );
+        assertApproxEqAbs(USDC.balanceOf(swapper.addr), 4513632092 / 2, 10);
+
+        assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
+        assertApproxEqAbs(
+            oSQTH.balanceOf(address(hook)),
+            8389745616890331647,
+            10
+        );
+    }
+
     // -- Helpers --
 
     HookEnabledSwapRouter router;
