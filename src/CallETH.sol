@@ -7,12 +7,14 @@ import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "mor
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 
+import {Position} from "v4-core/libraries/Position.sol";
 import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {Pool} from "v4-core/libraries/Pool.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
+import {ERC721} from "solmate/tokens/ERC721.sol";
 import {LiquidityAmounts} from "v4-core/../test/utils/LiquidityAmounts.sol";
 
 import {PoolKey} from "v4-core/types/PoolKey.sol";
@@ -26,7 +28,7 @@ import {PerpMath} from "./libraries/PerpMath.sol";
 
 import "forge-std/console.sol";
 
-contract CallETH is BaseHook {
+contract CallETH is BaseHook, ERC721 {
     using CurrencySettleTake for Currency;
     using PoolIdLibrary for PoolKey;
 
@@ -35,6 +37,8 @@ contract CallETH is BaseHook {
     error AddLiquidityThroughHook();
 
     error InRange();
+
+    error NotAnOptionOwner();
 
     error NoSwapWillOccur();
 
@@ -52,6 +56,17 @@ contract CallETH is BaseHook {
 
     mapping(PoolId => int24) public lastTick;
 
+    struct OptionInfo {
+        uint256 amount;
+        int24 tick;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 created;
+    }
+
+    uint256 private optionIdCounter = 0;
+    mapping(uint256 => OptionInfo) public optionInfo;
+
     function getTickLast(PoolId poolId) public view returns (int24) {
         return lastTick[poolId];
     }
@@ -60,7 +75,10 @@ contract CallETH is BaseHook {
         lastTick[poolId] = _tick;
     }
 
-    constructor(IPoolManager poolManager, Id _marketId) BaseHook(poolManager) {
+    constructor(
+        IPoolManager poolManager,
+        Id _marketId
+    ) BaseHook(poolManager) ERC721("CallETH", "CALL") {
         marketId = _marketId;
     }
 
@@ -129,8 +147,9 @@ contract CallETH is BaseHook {
 
     function deposit(
         PoolKey calldata key,
-        uint256 amount
-    ) external returns (int24 tickLower, int24 tickUpper) {
+        uint256 amount,
+        address to
+    ) external returns (uint256 optionId) {
         console.log(">> deposit");
         if (amount == 0) revert ZeroLiquidity();
         IERC20(Currency.unwrap(key.currency0)).transferFrom(
@@ -139,14 +158,11 @@ contract CallETH is BaseHook {
             amount
         );
 
-        tickLower = getCurrentTick(key.toId());
-        // console.log("Price from tick %s", PerpMath.getPriceFromTick(tickLower));
-        tickUpper = PerpMath.tickRoundDown(
+        int24 tickLower = getCurrentTick(key.toId());
+        int24 tickUpper = PerpMath.tickRoundDown(
             PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2),
             key.tickSpacing
         );
-        // console.logInt(tickUpper);
-        // tickUpper = -185296;
         console.log("> Ticks, lower/upper");
         console.logInt(tickLower);
         console.logInt(tickUpper);
@@ -164,6 +180,108 @@ contract CallETH is BaseHook {
             address(this),
             ""
         );
+        optionId = optionIdCounter;
+
+        optionInfo[optionId] = OptionInfo({
+            amount: amount,
+            tick: getCurrentTick(key.toId()),
+            tickLower: tickLower,
+            tickUpper: tickUpper,
+            created: block.timestamp
+        });
+
+        _mint(to, optionId);
+        optionIdCounter++;
+    }
+
+    function withdraw(
+        PoolKey calldata key,
+        uint256 optionId,
+        address to
+    ) external {
+        console.log(">> withdraw");
+        if (ownerOf(optionId) != msg.sender) revert NotAnOptionOwner();
+
+        uint256 balanceOSQTH = oSQTH.balanceOf(address(this));
+        if (balanceOSQTH != 0) {
+            uint256 amountWETH = swapExactInput(
+                address(oSQTH),
+                address(WETH),
+                uint256(int256(balanceOSQTH))
+            );
+
+            swapExactInput(address(WETH), address(wstETH), amountWETH);
+        }
+
+        {
+            OptionInfo memory info = optionInfo[optionId];
+
+            //TODO: How to update liquidity here?
+            Position.Info memory positionInfo = StateLibrary.getPosition(
+                poolManager,
+                PoolIdLibrary.toId(key),
+                address(this),
+                info.tickLower,
+                info.tickUpper,
+                ""
+            );
+
+            poolManager.unlock(
+                abi.encodeCall(
+                    this.unlockWithdrawPlace,
+                    (
+                        key,
+                        positionInfo.liquidity,
+                        info.tickLower,
+                        info.tickUpper
+                    )
+                )
+            );
+        }
+
+        // Now we could have, USDC & wstETH
+
+        morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
+        MorphoPosition memory p = morpho.position(marketId, address(this));
+        if (p.borrowShares != 0) {
+            Market memory m = morpho.market(marketId);
+            uint256 usdcToRepay = PerpMath.getAssetsBuyShares(
+                p.borrowShares,
+                m.totalBorrowShares,
+                m.totalBorrowAssets
+            );
+            console.log("> usdcToRepay", usdcToRepay);
+
+            uint256 balanceUSDC = USDC.balanceOf(address(this));
+            console.log("> balanceUSDC", balanceUSDC);
+            // if (usdcToRepay > balanceUSDC) {
+            // swapExactOutput(address(wstETH), address(USDC), 1000000);
+            // }
+
+            morpho.repay(
+                morpho.idToMarketParams(marketId),
+                0,
+                p.borrowShares,
+                address(this),
+                ""
+            );
+        }
+
+        {
+            console.log("> check position!");
+            morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
+            MorphoPosition memory p = morpho.position(marketId, address(this));
+            console.log("> p.borrowShares", p.borrowShares);
+        }
+
+        morpho.withdrawCollateral(
+            morpho.idToMarketParams(marketId),
+            p.collateral,
+            address(this),
+            address(this)
+        );
+
+        wstETH.transfer(to, wstETH.balanceOf(address(this)));
     }
 
     function unlockDepositPlace(
@@ -223,6 +341,45 @@ contract CallETH is BaseHook {
         return bytes("");
     }
 
+    function unlockWithdrawPlace(
+        PoolKey calldata key,
+        uint128 liquidity,
+        int24 tickLower,
+        int24 tickUpper
+    ) external selfOnly returns (bytes memory) {
+        console.log(">> unlockWithdrawPlace");
+
+        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: -int128(liquidity),
+                salt: ""
+            }),
+            ZERO_BYTES
+        );
+
+        if (delta.amount0() > 0) {
+            key.currency0.take(
+                poolManager,
+                address(this),
+                uint256(uint128(delta.amount0())),
+                false
+            );
+        }
+
+        if (delta.amount1() > 0) {
+            key.currency1.take(
+                poolManager,
+                address(this),
+                uint256(uint128(delta.amount1())),
+                false
+            );
+        }
+        return bytes("");
+    }
+
     function afterSwap(
         address,
         PoolKey calldata key,
@@ -249,10 +406,12 @@ contract CallETH is BaseHook {
                 address(this)
             );
 
-            uint256 amountOut = swapUSDC_WETH(
+            uint256 amountOut = swapExactInput(
+                address(USDC),
+                address(WETH),
                 uint256(int256(-deltas.amount1()))
             );
-            swapWETH_OSQTH(amountOut);
+            swapExactInput(address(WETH), address(oSQTH), amountOut);
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
             // console.logInt(deltas.amount0());
@@ -273,18 +432,25 @@ contract CallETH is BaseHook {
         return (CallETH.afterSwap.selector, 0);
     }
 
+    function tokenURI(uint256) public pure override returns (string memory) {
+        return "";
+    }
+
     // --- Helpers ---
 
     ISwapRouter immutable swapRouter =
         ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
-    // ** WETH -> oSQTH
-    function swapWETH_OSQTH(uint256 amountIn) internal returns (uint256) {
+    function swapExactInput(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn
+    ) internal returns (uint256) {
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
-                tokenIn: address(WETH),
-                tokenOut: address(oSQTH),
-                fee: 3000,
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                fee: getPoolFee(tokenIn, tokenOut),
                 recipient: address(this),
                 deadline: block.timestamp,
                 amountIn: amountIn,
@@ -294,20 +460,34 @@ contract CallETH is BaseHook {
         return swapRouter.exactInputSingle(params);
     }
 
-    // ** USDC -> WETH
-    function swapUSDC_WETH(uint256 amountIn) internal returns (uint256) {
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-            .ExactInputSingleParams({
-                tokenIn: address(USDC),
-                tokenOut: address(WETH),
-                fee: 500,
+    function swapExactOutput(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountOut
+    ) internal returns (uint256) {
+        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter
+            .ExactOutputSingleParams({
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                fee: getPoolFee(tokenIn, tokenOut),
                 recipient: address(this),
                 deadline: block.timestamp,
-                amountIn: amountIn,
-                amountOutMinimum: 0,
+                amountInMaximum: type(uint256).max,
+                amountOut: amountOut,
                 sqrtPriceLimitX96: 0
             });
-        return swapRouter.exactInputSingle(params);
+        return swapRouter.exactOutputSingle(params);
+    }
+
+    function getPoolFee(
+        address tokenIn,
+        address tokenOut
+    ) internal view returns (uint24) {
+        if (tokenIn == address(oSQTH) || tokenOut == address(oSQTH))
+            return 3000;
+        if (tokenIn == address(wstETH) || tokenOut == address(wstETH))
+            return 100;
+        return 500;
     }
 
     // ** oSQTH -> WETH -> USDC
