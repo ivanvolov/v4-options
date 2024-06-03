@@ -366,12 +366,16 @@ contract CallETHTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function getChainlinkPrice() internal view returns (int256) {
+    function getChainlinkPrice()
+        internal
+        view
+        returns (uint256 collateralPrice)
+    {
         MarketParams memory marketParams = morpho.idToMarketParams(
             Id.wrap(targetMarketId)
         );
 
-        uint256 collateralPrice = IOracle(marketParams.oracle).price();
+        collateralPrice = IOracle(marketParams.oracle).price();
         console.log("> collateralPrice", collateralPrice);
     }
 }

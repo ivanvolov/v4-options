@@ -6,7 +6,6 @@ import {ERC721} from "solmate/tokens/ERC721.sol";
 import {IERC20Minimal as IERC20} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "morpho-blue/interfaces/IMorpho.sol";
-import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 import {Position} from "v4-core/libraries/Position.sol";
@@ -25,6 +24,7 @@ import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
 import {BaseHook} from "./forks/BaseHook.sol";
+import {ISwapRouter} from "./forks/ISwapRouter.sol";
 import {PerpMath} from "./libraries/PerpMath.sol";
 
 import "forge-std/console.sol";
