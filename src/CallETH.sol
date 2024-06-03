@@ -202,17 +202,25 @@ contract CallETH is BaseHook, ERC721 {
         console.log(">> withdraw");
         if (ownerOf(optionId) != msg.sender) revert NotAnOptionOwner();
 
+        //** all oSQTH in wstETH
         uint256 balanceOSQTH = oSQTH.balanceOf(address(this));
         if (balanceOSQTH != 0) {
             uint256 amountWETH = swapExactInput(
                 address(oSQTH),
                 address(WETH),
-                uint256(int256(balanceOSQTH))
+                uint256(int256(balanceOSQTH)),
+                oSQTH_ETH_POOL_FEE
             );
 
-            swapExactInput(address(WETH), address(wstETH), amountWETH);
+            swapExactInput(
+                address(WETH),
+                address(wstETH),
+                amountWETH,
+                wstETH_WETH_POOL_FEE
+            );
         }
 
+        //** close position into wstETH & USDC
         {
             OptionInfo memory info = optionInfo[optionId];
 
@@ -241,47 +249,61 @@ contract CallETH is BaseHook, ERC721 {
 
         // Now we could have, USDC & wstETH
 
+        //** if USDC is borrowed buy extra and close the position
         morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
-        MorphoPosition memory p = morpho.position(marketId, address(this));
-        if (p.borrowShares != 0) {
-            Market memory m = morpho.market(marketId);
-            uint256 usdcToRepay = PerpMath.getAssetsBuyShares(
-                p.borrowShares,
-                m.totalBorrowShares,
-                m.totalBorrowAssets
-            );
-            console.log("> usdcToRepay", usdcToRepay);
-
+        uint256 usdcToRepay = getUSDCToRepay();
+        if (usdcToRepay != 0) {
             uint256 balanceUSDC = USDC.balanceOf(address(this));
             console.log("> balanceUSDC", balanceUSDC);
-            // if (usdcToRepay > balanceUSDC) {
-            // swapExactOutput(address(wstETH), address(USDC), 1000000);
-            // }
+            console.log("> balanceWstETH", wstETH.balanceOf(address(this)));
+            if (usdcToRepay > balanceUSDC) {
+                console.log("> buy USDC");
+                swapExactOutput(
+                    address(wstETH),
+                    address(USDC),
+                    usdcToRepay - balanceUSDC,
+                    wstETH_USDC_POOL_FEE
+                );
+            }
 
+            console.log("!");
             morpho.repay(
                 morpho.idToMarketParams(marketId),
-                0,
-                p.borrowShares,
+                usdcToRepay,
+                0, //p.borrowShares,
                 address(this),
                 ""
             );
         }
 
         {
-            console.log("> check position!");
             morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
-            MorphoPosition memory p = morpho.position(marketId, address(this));
-            console.log("> p.borrowShares", p.borrowShares);
+            getUSDCToRepay();
         }
 
-        morpho.withdrawCollateral(
-            morpho.idToMarketParams(marketId),
-            p.collateral,
-            address(this),
-            address(this)
-        );
+        // morpho.withdrawCollateral(
+        //     morpho.idToMarketParams(marketId),
+        //     p.collateral,
+        //     address(this),
+        //     address(this)
+        // );
 
         wstETH.transfer(to, wstETH.balanceOf(address(this)));
+    }
+
+    function getUSDCToRepay() internal view returns (uint256 usdcToRepay) {
+        console.log("> getUSDCToRepay");
+        Market memory m = morpho.market(marketId);
+        console.log(" m.totalBorrowShares", m.totalBorrowShares);
+        console.log(" m.totalBorrowAssets", m.totalBorrowAssets);
+        MorphoPosition memory p = morpho.position(marketId, address(this));
+        console.log(" p.borrowShares", p.borrowShares);
+        usdcToRepay = PerpMath.getAssetsBuyShares(
+            p.borrowShares,
+            m.totalBorrowShares,
+            m.totalBorrowAssets
+        );
+        console.log(" usdcToRepay", usdcToRepay);
     }
 
     function unlockDepositPlace(
@@ -409,9 +431,15 @@ contract CallETH is BaseHook, ERC721 {
             uint256 amountOut = swapExactInput(
                 address(USDC),
                 address(WETH),
-                uint256(int256(-deltas.amount1()))
+                uint256(int256(-deltas.amount1())),
+                ETH_USDC_POOL_FEE
             );
-            swapExactInput(address(WETH), address(oSQTH), amountOut);
+            swapExactInput(
+                address(WETH),
+                address(oSQTH),
+                amountOut,
+                oSQTH_ETH_POOL_FEE
+            );
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
             // console.logInt(deltas.amount0());
@@ -438,56 +466,54 @@ contract CallETH is BaseHook, ERC721 {
 
     // --- Helpers ---
 
+    uint24 public constant oSQTH_ETH_POOL_FEE = 3000;
+    uint24 public constant ETH_USDC_POOL_FEE = 500;
+    uint24 public constant wstETH_USDC_POOL_FEE = 500;
+    uint24 public constant wstETH_WETH_POOL_FEE = 100;
+
     ISwapRouter immutable swapRouter =
         ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
     function swapExactInput(
         address tokenIn,
         address tokenOut,
-        uint256 amountIn
+        uint256 amountIn,
+        uint24 fee
     ) internal returns (uint256) {
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-            .ExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                fee: getPoolFee(tokenIn, tokenOut),
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amountIn,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            });
-        return swapRouter.exactInputSingle(params);
+        return
+            swapRouter.exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: tokenIn,
+                    tokenOut: tokenOut,
+                    fee: fee,
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountIn: amountIn,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            );
     }
 
     function swapExactOutput(
         address tokenIn,
         address tokenOut,
-        uint256 amountOut
+        uint256 amountOut,
+        uint24 fee
     ) internal returns (uint256) {
-        ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter
-            .ExactOutputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                fee: getPoolFee(tokenIn, tokenOut),
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountInMaximum: type(uint256).max,
-                amountOut: amountOut,
-                sqrtPriceLimitX96: 0
-            });
-        return swapRouter.exactOutputSingle(params);
-    }
-
-    function getPoolFee(
-        address tokenIn,
-        address tokenOut
-    ) internal view returns (uint24) {
-        if (tokenIn == address(oSQTH) || tokenOut == address(oSQTH))
-            return 3000;
-        if (tokenIn == address(wstETH) || tokenOut == address(wstETH))
-            return 100;
-        return 500;
+        return
+            swapRouter.exactOutputSingle(
+                ISwapRouter.ExactOutputSingleParams({
+                    tokenIn: tokenIn,
+                    tokenOut: tokenOut,
+                    fee: fee,
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountInMaximum: type(uint256).max,
+                    amountOut: amountOut,
+                    sqrtPriceLimitX96: 0
+                })
+            );
     }
 
     // ** oSQTH -> WETH -> USDC
@@ -499,17 +525,16 @@ contract CallETH is BaseHook, ERC721 {
             uint24(3000),
             address(oSQTH)
         );
-
-        ISwapRouter.ExactOutputParams memory params = ISwapRouter
-            .ExactOutputParams({
-                path: path,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountOut: amountOut,
-                amountInMaximum: type(uint256).max
-            });
-
-        return swapRouter.exactOutput(params);
+        return
+            swapRouter.exactOutput(
+                ISwapRouter.ExactOutputParams({
+                    path: path,
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountOut: amountOut,
+                    amountInMaximum: type(uint256).max
+                })
+            );
     }
 
     function getCurrentTick(PoolId poolId) public view returns (int24) {

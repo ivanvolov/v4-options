@@ -57,6 +57,6 @@ library PerpMath {
         return
             totalBorrowAssets == 0
                 ? 0
-                : borrowShares.mul(totalBorrowAssets).div(totalBorrowShares);
+                : (borrowShares * totalBorrowAssets) / totalBorrowShares;
     }
 }

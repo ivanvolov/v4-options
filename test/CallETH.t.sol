@@ -222,7 +222,7 @@ contract CallETHTest is Test, Deployers {
         // test_deposit();
         test_swap_price_up();
 
-        deal(address(USDC), address(hook), 1000000);
+        // deal(address(USDC), address(hook), 1000000);
         vm.prank(alice.addr);
         hook.withdraw(key, 0, alice.addr);
 
