@@ -17,3 +17,5 @@ offchain
 safeless
 chainlink
 twap
+osqth
+wsteth
