@@ -11,10 +11,7 @@ import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "mor
 import {Morpho} from "morpho-blue/Morpho.sol";
 import {IOracle} from "morpho-blue/interfaces/IOracle.sol";
 import {MarketParamsLib} from "morpho-blue/libraries/MarketParamsLib.sol";
-import {IMorphoChainlinkOracleV2Factory} from "morpho-blue-oracles/morpho-chainlink/interfaces/IMorphoChainlinkOracleV2Factory.sol";
-import {MorphoChainlinkOracleV2} from "morpho-blue-oracles/morpho-chainlink/MorphoChainlinkOracleV2.sol";
 import {AggregatorV3Interface} from "morpho-blue-oracles/morpho-chainlink/libraries/ChainlinkDataFeedLib.sol";
-import {IERC4626} from "morpho-blue-oracles/morpho-chainlink/libraries/VaultLib.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TestAccount, TestAccountLib} from "./libraries/TestAccountLib.t.sol";
@@ -49,9 +46,10 @@ contract CallETHTest is Test, Deployers {
     TestAccount marketCreator;
     TestAccount morphoLpProvider;
 
-    TestERC20 wstETH;
+    TestERC20 WSTETH;
     TestERC20 USDC;
-    TestERC20 oSQTH;
+    TestERC20 OSQTH;
+    TestERC20 WETH;
 
     function setUp() public {
         deployFreshManagerAndRouters();
@@ -59,17 +57,16 @@ contract CallETHTest is Test, Deployers {
         alice = TestAccountLib.createTestAccount("alice");
         swapper = TestAccountLib.createTestAccount("swapper");
 
-        init_morpho_oracle();
         create_and_seed_morpho_market();
         init_hook();
 
         vm.startPrank(alice.addr);
-        wstETH.approve(address(hook), type(uint256).max);
+        WSTETH.approve(address(hook), type(uint256).max);
         USDC.approve(address(hook), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
-        wstETH.approve(address(router), type(uint256).max);
+        WSTETH.approve(address(router), type(uint256).max);
         USDC.approve(address(router), type(uint256).max);
         vm.stopPrank();
     }
@@ -80,9 +77,9 @@ contract CallETHTest is Test, Deployers {
         // ** Supply collateral
         vm.startPrank(alice.addr);
         uint256 collateralAmount = 1 ether;
-        deal(address(wstETH), address(alice.addr), collateralAmount);
+        deal(address(WSTETH), address(alice.addr), collateralAmount);
 
-        wstETH.approve(address(morpho), type(uint256).max);
+        WSTETH.approve(address(morpho), type(uint256).max);
         morpho.supplyCollateral(
             morpho.idToMarketParams(marketId),
             collateralAmount,
@@ -94,7 +91,7 @@ contract CallETHTest is Test, Deployers {
         assertEq(p.supplyShares, 0);
         assertEq(p.borrowShares, 0);
         assertEq(p.collateral, collateralAmount);
-        assertEq(wstETH.balanceOf(alice.addr), 0);
+        assertEq(WSTETH.balanceOf(alice.addr), 0);
 
         // ** Borrow
         uint256 borrowAmount = 100 * 1e6;
@@ -116,44 +113,65 @@ contract CallETHTest is Test, Deployers {
 
     function test_deposit() public {
         uint256 amountToDeposit = 100 ether;
-        deal(address(wstETH), address(alice.addr), amountToDeposit);
+        deal(address(WSTETH), address(alice.addr), amountToDeposit);
         vm.prank(alice.addr);
         uint256 optionId = hook.deposit(key, amountToDeposit, alice.addr);
 
-        (, , int24 tickLower, int24 tickUpper, ) = hook.optionInfo(optionId);
-
-        Position.Info memory positionInfo = StateLibrary.getPosition(
-            manager,
-            PoolIdLibrary.toId(key),
-            address(hook),
-            tickLower,
-            tickUpper,
-            ""
-        );
-        assertEq(positionInfo.liquidity, 11433916692172150);
-        assertEq(wstETH.balanceOf(alice.addr), 0);
+        (uint128 liquidity, , ) = hook.getOptionPosition(key, optionId);
+        assertEq(liquidity, 11433916692172150);
+        assertEq(WSTETH.balanceOf(alice.addr), 0);
         assertEq(USDC.balanceOf(alice.addr), 0);
 
-        assertEq(wstETH.balanceOf(address(hook)), 0);
+        assertEq(WSTETH.balanceOf(address(hook)), 0);
         assertEq(USDC.balanceOf(address(hook)), 0);
 
         MorphoPosition memory p = morpho.position(marketId, address(hook));
-        assertEq(p.supplyShares, 0);
         assertEq(p.borrowShares, 0);
         assertApproxEqAbs(p.collateral, amountToDeposit / 2, 10000);
+    }
+
+    function test_deposit_withdraw_not_option_owner_revert() public {
+        test_deposit();
+
+        vm.expectRevert(CallETH.NotAnOptionOwner.selector);
+        hook.withdraw(key, 0, alice.addr);
+    }
+
+    function test_deposit_withdraw() public {
+        test_deposit();
+
+        vm.prank(alice.addr);
+        hook.withdraw(key, 0, alice.addr);
+
+        assertEq(USDC.balanceOf(address(hook)), 0);
+        assertEq(WETH.balanceOf(address(hook)), 0);
+        assertEq(WSTETH.balanceOf(address(hook)), 0);
+        assertEq(OSQTH.balanceOf(address(hook)), 0);
+
+        assertApproxEqAbs(WSTETH.balanceOf(alice.addr), 100 ether, 1e2);
+        assertEq(USDC.balanceOf(address(hook)), 0);
+        assertEq(WETH.balanceOf(address(hook)), 0);
+        assertEq(OSQTH.balanceOf(address(hook)), 0);
+
+        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
+        assertEq(liquidity, 0);
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 0);
+        assertEq(p.collateral, 0);
     }
 
     function test_swap_price_down_revert() public {
         test_deposit();
 
-        deal(address(wstETH), address(swapper.addr), 1 ether);
+        deal(address(WSTETH), address(swapper.addr), 1 ether);
 
         vm.prank(swapper.addr);
         vm.expectRevert(CallETH.NoSwapWillOccur.selector);
         router.swap(
             key,
             IPoolManager.SwapParams(
-                true, // wstETH -> USDC
+                true, // WSTETH -> USDC
                 int256(1 ether),
                 TickMath.MIN_SQRT_PRICE + 1
             ),
@@ -170,22 +188,26 @@ contract CallETHTest is Test, Deployers {
         router.swap(
             key,
             IPoolManager.SwapParams(
-                false, // USDC -> wstETH
+                false, // USDC -> WSTETH
                 int256(1 ether),
                 TickMath.MAX_SQRT_PRICE - 1
             ),
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
-        assertApproxEqAbs(wstETH.balanceOf(swapper.addr), 1 ether, 10);
+        assertApproxEqAbs(WSTETH.balanceOf(swapper.addr), 1 ether, 10);
         assertApproxEqAbs(USDC.balanceOf(swapper.addr), 0, 10);
 
         assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
         assertApproxEqAbs(
-            oSQTH.balanceOf(address(hook)),
+            OSQTH.balanceOf(address(hook)),
             16851686274526807531,
             10
         );
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 4513632092000000);
+        assertApproxEqAbs(p.collateral, 50 ether, 10000);
     }
 
     function test_swap_price_up_then_down() public {
@@ -195,7 +217,7 @@ contract CallETHTest is Test, Deployers {
         router.swap(
             key,
             IPoolManager.SwapParams(
-                true, // wstETH -> USDC
+                true, // WSTETH -> USDC
                 4513632092 / 2,
                 TickMath.MIN_SQRT_PRICE + 1
             ),
@@ -204,7 +226,7 @@ contract CallETHTest is Test, Deployers {
         );
 
         assertApproxEqAbs(
-            wstETH.balanceOf(swapper.addr),
+            WSTETH.balanceOf(swapper.addr),
             501269034773216656,
             10
         );
@@ -212,29 +234,44 @@ contract CallETHTest is Test, Deployers {
 
         assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
         assertApproxEqAbs(
-            oSQTH.balanceOf(address(hook)),
+            OSQTH.balanceOf(address(hook)),
             8389745616890331647,
             10
         );
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 2256816046000000);
+        assertApproxEqAbs(p.collateral, 50000000000000000000, 10000);
     }
 
     function test_swap_price_up_then_withdraw() public {
-        // test_deposit();
         test_swap_price_up();
 
-        // deal(address(USDC), address(hook), 1000000);
         vm.prank(alice.addr);
         hook.withdraw(key, 0, alice.addr);
 
-        // assertEq(USDC.balanceOf(address(hook)), 0);
+        assertEq(USDC.balanceOf(address(hook)), 0);
+        assertEq(WETH.balanceOf(address(hook)), 0);
+        assertEq(WSTETH.balanceOf(address(hook)), 0);
+        assertEq(OSQTH.balanceOf(address(hook)), 0);
+
+        assertApproxEqAbs(WSTETH.balanceOf(alice.addr), 100 ether, 1e15);
+        assertEq(USDC.balanceOf(address(hook)), 0);
+        assertEq(WETH.balanceOf(address(hook)), 0);
+        assertEq(OSQTH.balanceOf(address(hook)), 0);
+
+        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
+        assertEq(liquidity, 0);
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 0);
+        assertEq(p.collateral, 0);
     }
 
     // -- Helpers --
 
     HookEnabledSwapRouter router;
 
-    IMorphoChainlinkOracleV2Factory morphoOracleFactory;
-    MorphoChainlinkOracleV2 morphoOracle;
     Id marketId;
 
     bytes32 targetMarketId =
@@ -261,7 +298,7 @@ contract CallETHTest is Test, Deployers {
         // console.log("> initialSQRTPrice", uint256(initialSQRTPrice));
 
         (key, ) = initPool(
-            Currency.wrap(address(wstETH)),
+            Currency.wrap(address(WSTETH)),
             Currency.wrap(address(USDC)),
             hook,
             200,
@@ -274,12 +311,14 @@ contract CallETHTest is Test, Deployers {
         marketCreator = TestAccountLib.createTestAccount("marketCreator");
         morphoLpProvider = TestAccountLib.createTestAccount("morphoLpProvider");
 
-        wstETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-        vm.label(address(wstETH), "wstETH");
+        WSTETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+        vm.label(address(WSTETH), "WSTETH");
         USDC = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
         vm.label(address(USDC), "USDC");
-        oSQTH = TestERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
-        vm.label(address(oSQTH), "oSQTH");
+        OSQTH = TestERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
+        vm.label(address(OSQTH), "OSQTH");
+        WETH = TestERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+        vm.label(address(WETH), "WETH");
 
         morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
@@ -334,25 +373,5 @@ contract CallETHTest is Test, Deployers {
 
         uint256 collateralPrice = IOracle(marketParams.oracle).price();
         console.log("> collateralPrice", collateralPrice);
-    }
-
-    function init_morpho_oracle() internal {
-        // morphoOracleFactory = IMorphoChainlinkOracleV2Factory(
-        //     0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
-        // );
-        // morphoOracle = morphoOracleFactory.createMorphoChainlinkOracleV2(
-        //     IERC4626(0x0000000000000000000000000000000000000000),
-        //     1,
-        //     AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-        //     AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-        //     18,
-        //     IERC4626(0x0000000000000000000000000000000000000000),
-        //     1,
-        //     AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46),
-        //     AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-        //     6,
-        //     "0x"
-        // );
-        // console.log(oracle.price());
     }
 }

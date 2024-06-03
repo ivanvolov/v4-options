@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {ERC721} from "solmate/tokens/ERC721.sol";
+
 import {IERC20Minimal as IERC20} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "morpho-blue/interfaces/IMorpho.sol";
@@ -14,7 +16,6 @@ import {Pool} from "v4-core/libraries/Pool.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
-import {ERC721} from "solmate/tokens/ERC721.sol";
 import {LiquidityAmounts} from "v4-core/../test/utils/LiquidityAmounts.sol";
 
 import {PoolKey} from "v4-core/types/PoolKey.sol";
@@ -42,10 +43,18 @@ contract CallETH is BaseHook, ERC721 {
 
     error NoSwapWillOccur();
 
-    IERC20 wstETH = IERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+    struct OptionInfo {
+        uint256 amount;
+        int24 tick;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 created;
+    }
+
+    IERC20 WSTETH = IERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
     IERC20 WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 oSQTH = IERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
+    IERC20 OSQTH = IERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
 
     bytes internal constant ZERO_BYTES = bytes("");
 
@@ -55,14 +64,6 @@ contract CallETH is BaseHook, ERC721 {
         IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
     mapping(PoolId => int24) public lastTick;
-
-    struct OptionInfo {
-        uint256 amount;
-        int24 tick;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 created;
-    }
 
     uint256 private optionIdCounter = 0;
     mapping(uint256 => OptionInfo) public optionInfo;
@@ -118,8 +119,8 @@ contract CallETH is BaseHook, ERC721 {
 
         USDC.approve(address(swapRouter), type(uint256).max);
         WETH.approve(address(swapRouter), type(uint256).max);
-        wstETH.approve(address(swapRouter), type(uint256).max);
-        oSQTH.approve(address(swapRouter), type(uint256).max);
+        WSTETH.approve(address(swapRouter), type(uint256).max);
+        OSQTH.approve(address(swapRouter), type(uint256).max);
 
         IERC20(Currency.unwrap(key.currency0)).approve(
             address(morpho),
@@ -135,7 +136,7 @@ contract CallETH is BaseHook, ERC721 {
         return CallETH.afterInitialize.selector;
     }
 
-    // Disable adding liquidity through the PM
+    /// @notice  Disable adding liquidity through the PM
     function beforeAddLiquidity(
         address,
         PoolKey calldata,
@@ -178,7 +179,7 @@ contract CallETH is BaseHook, ERC721 {
             morpho.idToMarketParams(marketId),
             IERC20(Currency.unwrap(key.currency0)).balanceOf(address(this)),
             address(this),
-            ""
+            ZERO_BYTES
         );
         optionId = optionIdCounter;
 
@@ -202,108 +203,86 @@ contract CallETH is BaseHook, ERC721 {
         console.log(">> withdraw");
         if (ownerOf(optionId) != msg.sender) revert NotAnOptionOwner();
 
-        //** all oSQTH in wstETH
-        uint256 balanceOSQTH = oSQTH.balanceOf(address(this));
+        //** swap all OSQTH in WSTETH
+        uint256 balanceOSQTH = OSQTH.balanceOf(address(this));
         if (balanceOSQTH != 0) {
             uint256 amountWETH = swapExactInput(
-                address(oSQTH),
+                address(OSQTH),
                 address(WETH),
                 uint256(int256(balanceOSQTH)),
-                oSQTH_ETH_POOL_FEE
+                OSQTH_ETH_POOL_FEE
             );
 
             swapExactInput(
                 address(WETH),
-                address(wstETH),
+                address(WSTETH),
                 amountWETH,
-                wstETH_WETH_POOL_FEE
+                WSTETH_WETH_POOL_FEE
             );
         }
 
-        //** close position into wstETH & USDC
+        //** close position into WSTETH & USDC
         {
-            OptionInfo memory info = optionInfo[optionId];
-
             //TODO: How to update liquidity here?
-            Position.Info memory positionInfo = StateLibrary.getPosition(
-                poolManager,
-                PoolIdLibrary.toId(key),
-                address(this),
-                info.tickLower,
-                info.tickUpper,
-                ""
-            );
+            (
+                uint128 liquidity,
+                int24 tickLower,
+                int24 tickUpper
+            ) = getOptionPosition(key, optionId);
 
             poolManager.unlock(
                 abi.encodeCall(
                     this.unlockWithdrawPlace,
-                    (
-                        key,
-                        positionInfo.liquidity,
-                        info.tickLower,
-                        info.tickUpper
-                    )
+                    (key, liquidity, tickLower, tickUpper)
                 )
             );
         }
 
-        // Now we could have, USDC & wstETH
+        //** Now we could have, USDC & WSTETH
 
         //** if USDC is borrowed buy extra and close the position
         morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
-        uint256 usdcToRepay = getUSDCToRepay();
+        Market memory m = morpho.market(marketId);
+        MorphoPosition memory p = morpho.position(marketId, address(this));
+        uint256 usdcToRepay = m.totalBorrowAssets; //TODO: this is a bad huck, fix in the future
         if (usdcToRepay != 0) {
             uint256 balanceUSDC = USDC.balanceOf(address(this));
-            console.log("> balanceUSDC", balanceUSDC);
-            console.log("> balanceWstETH", wstETH.balanceOf(address(this)));
+            // console.log("> balanceUSDC", balanceUSDC);
             if (usdcToRepay > balanceUSDC) {
-                console.log("> buy USDC");
+                console.log("> buy USDC to repay");
                 swapExactOutput(
-                    address(wstETH),
+                    address(WSTETH),
                     address(USDC),
                     usdcToRepay - balanceUSDC,
-                    wstETH_USDC_POOL_FEE
+                    WSTETH_USDC_POOL_FEE
+                );
+            } else {
+                console.log("> sell extra USDC");
+                swapExactOutput(
+                    address(USDC),
+                    address(WSTETH),
+                    balanceUSDC,
+                    WSTETH_USDC_POOL_FEE
                 );
             }
 
-            console.log("!");
             morpho.repay(
                 morpho.idToMarketParams(marketId),
-                usdcToRepay,
-                0, //p.borrowShares,
+                0,
+                p.borrowShares,
                 address(this),
-                ""
+                ZERO_BYTES
             );
         }
 
-        {
-            morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
-            getUSDCToRepay();
-        }
-
-        // morpho.withdrawCollateral(
-        //     morpho.idToMarketParams(marketId),
-        //     p.collateral,
-        //     address(this),
-        //     address(this)
-        // );
-
-        wstETH.transfer(to, wstETH.balanceOf(address(this)));
-    }
-
-    function getUSDCToRepay() internal view returns (uint256 usdcToRepay) {
-        console.log("> getUSDCToRepay");
-        Market memory m = morpho.market(marketId);
-        console.log(" m.totalBorrowShares", m.totalBorrowShares);
-        console.log(" m.totalBorrowAssets", m.totalBorrowAssets);
-        MorphoPosition memory p = morpho.position(marketId, address(this));
-        console.log(" p.borrowShares", p.borrowShares);
-        usdcToRepay = PerpMath.getAssetsBuyShares(
-            p.borrowShares,
-            m.totalBorrowShares,
-            m.totalBorrowAssets
+        morpho.withdrawCollateral(
+            morpho.idToMarketParams(marketId),
+            p.collateral,
+            address(this),
+            address(this)
         );
-        console.log(" usdcToRepay", usdcToRepay);
+
+        WSTETH.transfer(to, WSTETH.balanceOf(address(this)));
     }
 
     function unlockDepositPlace(
@@ -330,7 +309,7 @@ contract CallETH is BaseHook, ERC721 {
                 tickLower: tickLower,
                 tickUpper: tickUpper,
                 liquidityDelta: int128(liquidity),
-                salt: ""
+                salt: bytes32(ZERO_BYTES)
             }),
             ZERO_BYTES
         );
@@ -360,7 +339,7 @@ contract CallETH is BaseHook, ERC721 {
                 false
             );
         }
-        return bytes("");
+        return ZERO_BYTES;
     }
 
     function unlockWithdrawPlace(
@@ -377,7 +356,7 @@ contract CallETH is BaseHook, ERC721 {
                 tickLower: tickLower,
                 tickUpper: tickUpper,
                 liquidityDelta: -int128(liquidity),
-                salt: ""
+                salt: bytes32(ZERO_BYTES)
             }),
             ZERO_BYTES
         );
@@ -399,7 +378,7 @@ contract CallETH is BaseHook, ERC721 {
                 false
             );
         }
-        return bytes("");
+        return ZERO_BYTES;
     }
 
     function afterSwap(
@@ -436,9 +415,9 @@ contract CallETH is BaseHook, ERC721 {
             );
             swapExactInput(
                 address(WETH),
-                address(oSQTH),
+                address(OSQTH),
                 amountOut,
-                oSQTH_ETH_POOL_FEE
+                OSQTH_ETH_POOL_FEE
             );
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
@@ -452,7 +431,7 @@ contract CallETH is BaseHook, ERC721 {
                 uint256(int256(deltas.amount1())),
                 0,
                 address(this),
-                ""
+                ZERO_BYTES
             );
         }
 
@@ -466,10 +445,10 @@ contract CallETH is BaseHook, ERC721 {
 
     // --- Helpers ---
 
-    uint24 public constant oSQTH_ETH_POOL_FEE = 3000;
+    uint24 public constant OSQTH_ETH_POOL_FEE = 3000;
     uint24 public constant ETH_USDC_POOL_FEE = 500;
-    uint24 public constant wstETH_USDC_POOL_FEE = 500;
-    uint24 public constant wstETH_WETH_POOL_FEE = 100;
+    uint24 public constant WSTETH_USDC_POOL_FEE = 500;
+    uint24 public constant WSTETH_WETH_POOL_FEE = 100;
 
     ISwapRouter immutable swapRouter =
         ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
@@ -516,14 +495,13 @@ contract CallETH is BaseHook, ERC721 {
             );
     }
 
-    // ** oSQTH -> WETH -> USDC
     function swapOSQTH_WETH_USDC(uint256 amountOut) internal returns (uint256) {
         bytes memory path = abi.encodePacked(
             address(USDC),
             uint24(500),
             address(WETH),
             uint24(3000),
-            address(oSQTH)
+            address(OSQTH)
         );
         return
             swapRouter.exactOutput(
@@ -540,5 +518,22 @@ contract CallETH is BaseHook, ERC721 {
     function getCurrentTick(PoolId poolId) public view returns (int24) {
         (, int24 currentTick, , ) = StateLibrary.getSlot0(poolManager, poolId);
         return currentTick;
+    }
+
+    function getOptionPosition(
+        PoolKey memory key,
+        uint256 optionId
+    ) public view returns (uint128, int24, int24) {
+        OptionInfo memory info = optionInfo[optionId];
+
+        Position.Info memory positionInfo = StateLibrary.getPosition(
+            poolManager,
+            PoolIdLibrary.toId(key),
+            address(this),
+            info.tickLower,
+            info.tickUpper,
+            bytes32(ZERO_BYTES)
+        );
+        return (positionInfo.liquidity, info.tickLower, info.tickUpper);
     }
 }

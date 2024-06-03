@@ -18,3 +18,4 @@ safeless
 chainlink
 twap
 osqth
+wsteth
