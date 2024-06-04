@@ -34,6 +34,8 @@ import {PerpMath} from "../src/libraries/PerpMath.sol";
 
 import "forge-std/console.sol";
 
+import {IController} from "squeeth-monorepo/interfaces/IController.sol";
+
 contract PutETHTest is Test, Deployers {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
@@ -80,7 +82,23 @@ contract PutETHTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function test_osqth_operations() public {}
+    function test_osqth_operations() public {
+        IController powerTokenController = IController(
+            0x64187ae08781B09368e6253F9E94951243A493D5
+        );
+        vm.startPrank(alice.addr);
+        console.log(OSQTH.balanceOf(alice.addr));
+        deal(alice.addr, 100 ether);
+
+        uint256 vaultId = 70;
+        powerTokenController.mintWPowerPerpAmount{value: 1 ether}(
+            vaultId,
+            1 ether,
+            0
+        );
+
+        vm.stopPrank(alice.addr);
+    }
 
     function test_deposit() public {
         uint256 amountToDeposit = 10000 * 1e6;

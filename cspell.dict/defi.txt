@@ -19,3 +19,4 @@ chainlink
 twap
 osqth
 wsteth
+squeeth
