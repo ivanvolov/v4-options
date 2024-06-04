@@ -57,6 +57,15 @@ contract PutETHTest is Test, Deployers {
         alice = TestAccountLib.createTestAccount("alice");
         swapper = TestAccountLib.createTestAccount("swapper");
 
+        WSTETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+        vm.label(address(WSTETH), "WSTETH");
+        USDC = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        vm.label(address(USDC), "USDC");
+        OSQTH = TestERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
+        vm.label(address(OSQTH), "OSQTH");
+        WETH = TestERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+        vm.label(address(WETH), "WETH");
+
         create_and_seed_morpho_market();
         init_hook();
 
@@ -71,20 +80,77 @@ contract PutETHTest is Test, Deployers {
         vm.stopPrank();
     }
 
+    function test_osqth_operations() public {}
+
     function test_deposit() public {
-        // uint256 amountToDeposit = 100 ether;
-        // deal(address(WSTETH), address(alice.addr), amountToDeposit);
-        // vm.prank(alice.addr);
-        // uint256 optionId = hook.deposit(key, amountToDeposit, alice.addr);
-        // (uint128 liquidity, , ) = hook.getOptionPosition(key, optionId);
-        // assertEq(liquidity, 11433916692172150);
-        // assertEq(WSTETH.balanceOf(alice.addr), 0);
-        // assertEq(USDC.balanceOf(alice.addr), 0);
-        // assertEq(WSTETH.balanceOf(address(hook)), 0);
-        // assertEq(USDC.balanceOf(address(hook)), 0);
+        uint256 amountToDeposit = 10000 * 1e6;
+        deal(address(USDC), address(alice.addr), amountToDeposit);
+        vm.prank(alice.addr);
+        uint256 optionId = hook.deposit(key, amountToDeposit, alice.addr);
+        (uint128 liquidity, , ) = hook.getOptionPosition(key, optionId);
+        assertEq(liquidity, 254863304324955);
+        assertEq(WSTETH.balanceOf(alice.addr), 0);
+        assertEq(USDC.balanceOf(alice.addr), 0);
+        assertEq(WSTETH.balanceOf(address(hook)), 0);
+        assertEq(USDC.balanceOf(address(hook)), 0);
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 0);
+        assertApproxEqAbs(p.collateral, amountToDeposit / 2, 10000);
+    }
+
+    function test_deposit_withdraw_not_option_owner_revert() public {
+        test_deposit();
+
+        vm.expectRevert(PutETH.NotAnOptionOwner.selector);
+        hook.withdraw(key, 0, alice.addr);
+    }
+
+    function test_swap_price_up_revert() public {
+        test_deposit();
+
+        deal(address(USDC), address(swapper.addr), 10000 * 1e6);
+        vm.prank(swapper.addr);
+        vm.expectRevert(PutETH.NoSwapWillOccur.selector);
+        router.swap(
+            key,
+            IPoolManager.SwapParams(
+                false, // USDC -> WSTETH
+                int256(1 ether),
+                TickMath.MAX_SQRT_PRICE - 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
+    }
+
+    function test_swap_price_down() public {
+        test_deposit();
+
+        deal(address(WSTETH), address(swapper.addr), 1362396734796578497);
+        vm.prank(swapper.addr);
+        router.swap(
+            key,
+            IPoolManager.SwapParams(
+                true, // WSTETH -> USDC
+                4500 * 1e6,
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
+        assertApproxEqAbs(WSTETH.balanceOf(swapper.addr), 0, 10);
+        assertApproxEqAbs(USDC.balanceOf(swapper.addr), 4500 * 1e6, 10);
+
+        // assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
+        // assertApproxEqAbs(
+        //     OSQTH.balanceOf(address(hook)),
+        //     16851686274526807531,
+        //     10
+        // );
+
         // MorphoPosition memory p = morpho.position(marketId, address(hook));
-        // assertEq(p.borrowShares, 0);
-        // assertApproxEqAbs(p.collateral, amountToDeposit / 2, 10000);
+        // assertEq(p.borrowShares, 4513632092000000);
+        // assertApproxEqAbs(p.collateral, 50 ether, 10000);
     }
 
     // -- Helpers --
@@ -127,20 +193,13 @@ contract PutETHTest is Test, Deployers {
         marketCreator = TestAccountLib.createTestAccount("marketCreator");
         morphoLpProvider = TestAccountLib.createTestAccount("morphoLpProvider");
 
-        WSTETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-        vm.label(address(WSTETH), "WSTETH");
-        USDC = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-        vm.label(address(USDC), "USDC");
-        OSQTH = TestERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
-        vm.label(address(OSQTH), "OSQTH");
-        WETH = TestERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-        vm.label(address(WETH), "WETH");
-
         morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
         MarketParams memory marketParams = morpho.idToMarketParams(
             Id.wrap(targetMarketId)
         );
+        marketParams.loanToken = address(WSTETH);
+        marketParams.collateralToken = address(USDC);
         marketParams.lltv = 915000000000000000;
 
         vm.prank(marketCreator.addr);
@@ -160,12 +219,12 @@ contract PutETHTest is Test, Deployers {
 
         // ** Deposit liquidity
         vm.startPrank(morphoLpProvider.addr);
-        deal(address(USDC), morphoLpProvider.addr, 10000 * 1e6);
+        deal(address(WSTETH), morphoLpProvider.addr, 100 * 1e18);
 
-        USDC.approve(address(morpho), type(uint256).max);
+        WSTETH.approve(address(morpho), type(uint256).max);
         (, uint256 shares) = morpho.supply(
             morpho.idToMarketParams(marketId),
-            10000 * 1e6,
+            100 * 1e18,
             0,
             morphoLpProvider.addr,
             ""
@@ -178,7 +237,7 @@ contract PutETHTest is Test, Deployers {
         assertEq(p.supplyShares, shares);
         assertEq(p.borrowShares, 0);
         assertEq(p.collateral, 0);
-        assertEq(USDC.balanceOf(morphoLpProvider.addr), 0);
+        assertEq(WETH.balanceOf(morphoLpProvider.addr), 0);
         vm.stopPrank();
     }
 }

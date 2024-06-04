@@ -424,15 +424,19 @@ contract CallETH is BaseHook, ERC721 {
             // console.logInt(deltas.amount0());
             // console.logInt(deltas.amount1());
 
-            swapOSQTH_WETH_USDC(uint256(int256(deltas.amount1())));
+            MorphoPosition memory p = morpho.position(marketId, address(this));
+            if (p.borrowShares != 0) {
+                //TODO: here implement the part if borrowShares to USDC is < deltas in USDC
+                swapOSQTH_WETH_USDC(uint256(int256(deltas.amount1())));
 
-            morpho.repay(
-                morpho.idToMarketParams(marketId),
-                uint256(int256(deltas.amount1())),
-                0,
-                address(this),
-                ZERO_BYTES
-            );
+                morpho.repay(
+                    morpho.idToMarketParams(marketId),
+                    uint256(int256(deltas.amount1())),
+                    0,
+                    address(this),
+                    ZERO_BYTES
+                );
+            }
         }
 
         setTickLast(key.toId(), tick);

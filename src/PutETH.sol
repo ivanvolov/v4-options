@@ -153,15 +153,15 @@ contract PutETH is BaseHook, ERC721 {
     ) external returns (uint256 optionId) {
         console.log(">> deposit");
         if (amount == 0) revert ZeroLiquidity();
-        IERC20(Currency.unwrap(key.currency0)).transferFrom(
+        IERC20(Currency.unwrap(key.currency1)).transferFrom(
             msg.sender,
             address(this),
             amount
         );
 
-        int24 tickLower = getCurrentTick(key.toId());
-        int24 tickUpper = PerpMath.tickRoundDown(
-            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2),
+        int24 tickUpper = getCurrentTick(key.toId());
+        int24 tickLower = PerpMath.tickRoundDown(
+            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickUpper) / 2),
             key.tickSpacing
         );
         console.log("> Ticks, lower/upper");
@@ -177,7 +177,7 @@ contract PutETH is BaseHook, ERC721 {
 
         morpho.supplyCollateral(
             morpho.idToMarketParams(marketId),
-            IERC20(Currency.unwrap(key.currency0)).balanceOf(address(this)),
+            IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this)),
             address(this),
             ZERO_BYTES
         );
@@ -296,7 +296,7 @@ contract PutETH is BaseHook, ERC721 {
         // console.logInt(tickLower);
         // console.logInt(tickUpper);
 
-        uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmount1(
             TickMath.getSqrtPriceAtTick(tickUpper),
             TickMath.getSqrtPriceAtTick(tickLower),
             amount
@@ -399,40 +399,40 @@ contract PutETH is BaseHook, ERC721 {
             // console.logInt(deltas.amount0());
             // console.logInt(deltas.amount1());
 
-            morpho.borrow(
-                morpho.idToMarketParams(marketId),
-                uint256(int256(-deltas.amount1())),
-                0,
-                address(this),
-                address(this)
-            );
+            // morpho.borrow(
+            //     morpho.idToMarketParams(marketId),
+            //     uint256(int256(-deltas.amount1())),
+            //     0,
+            //     address(this),
+            //     address(this)
+            // );
 
-            uint256 amountOut = swapExactInput(
-                address(USDC),
-                address(WETH),
-                uint256(int256(-deltas.amount1())),
-                ETH_USDC_POOL_FEE
-            );
-            swapExactInput(
-                address(WETH),
-                address(OSQTH),
-                amountOut,
-                OSQTH_ETH_POOL_FEE
-            );
+            // uint256 amountOut = swapExactInput(
+            //     address(USDC),
+            //     address(WETH),
+            //     uint256(int256(-deltas.amount1())),
+            //     ETH_USDC_POOL_FEE
+            // );
+            // swapExactInput(
+            //     address(WETH),
+            //     address(OSQTH),
+            //     amountOut,
+            //     OSQTH_ETH_POOL_FEE
+            // );
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
             // console.logInt(deltas.amount0());
             // console.logInt(deltas.amount1());
 
-            swapOSQTH_WETH_USDC(uint256(int256(deltas.amount1())));
+            // swapOSQTH_WETH_USDC(uint256(int256(deltas.amount1())));
 
-            morpho.repay(
-                morpho.idToMarketParams(marketId),
-                uint256(int256(deltas.amount1())),
-                0,
-                address(this),
-                ZERO_BYTES
-            );
+            // morpho.repay(
+            //     morpho.idToMarketParams(marketId),
+            //     uint256(int256(deltas.amount1())),
+            //     0,
+            //     address(this),
+            //     ZERO_BYTES
+            // );
         }
 
         setTickLast(key.toId(), tick);
