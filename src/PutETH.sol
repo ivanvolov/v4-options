@@ -5,8 +5,7 @@ import {ERC721} from "solmate/tokens/ERC721.sol";
 
 import {IERC20Minimal as IERC20} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "morpho-blue/interfaces/IMorpho.sol";
-import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
+import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
 
 import {Position} from "v4-core/libraries/Position.sol";
 import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
@@ -14,7 +13,6 @@ import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {Pool} from "v4-core/libraries/Pool.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
-import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {LiquidityAmounts} from "v4-core/../test/utils/LiquidityAmounts.sol";
 
 import {PoolKey} from "v4-core/types/PoolKey.sol";

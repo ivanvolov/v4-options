@@ -7,11 +7,10 @@ import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 
-import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "morpho-blue/interfaces/IMorpho.sol";
-import {Morpho} from "morpho-blue/Morpho.sol";
-import {IOracle} from "morpho-blue/interfaces/IOracle.sol";
-import {MarketParamsLib} from "morpho-blue/libraries/MarketParamsLib.sol";
-import {AggregatorV3Interface} from "morpho-blue-oracles/morpho-chainlink/libraries/ChainlinkDataFeedLib.sol";
+import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
+
+import {IOracle} from "@forks/morpho/IOracle.sol";
+import {MarketParamsLib} from "@forks/morpho/MarketParamsLib.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TestAccount, TestAccountLib} from "./libraries/TestAccountLib.t.sol";

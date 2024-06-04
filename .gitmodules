@@ -4,24 +4,6 @@
 [submodule "lib/v4-core"]
 	path = lib/v4-core
 	url = https://github.com/Uniswap/v4-core
-[submodule "lib/morpho-blue"]
-	path = lib/morpho-blue
-	url = https://github.com/morpho-org/morpho-blue
-[submodule "lib/morpho-blue-oracles"]
-	path = lib/morpho-blue-oracles
-	url = https://github.com/morpho-org/morpho-blue-oracles
 [submodule "lib/v4-periphery"]
 	path = lib/v4-periphery
 	url = https://github.com/Uniswap/v4-periphery
-[submodule "lib/v3-periphery"]
-	path = lib/v3-periphery
-	url = https://github.com/Uniswap/v3-periphery
-[submodule "lib/v3-core"]
-	path = lib/v3-core
-	url = https://github.com/Uniswap/v3-core
-[submodule "lib/solmate"]
-	path = lib/solmate
-	url = https://github.com/transmissions11/solmate
-[submodule "lib/squeeth-monorepo"]
-	path = lib/squeeth-monorepo
-	url = https://github.com/opynfinance/squeeth-monorepo

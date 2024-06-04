@@ -7,11 +7,9 @@ import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 
-import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "morpho-blue/interfaces/IMorpho.sol";
-import {Morpho} from "morpho-blue/Morpho.sol";
-import {IOracle} from "morpho-blue/interfaces/IOracle.sol";
-import {MarketParamsLib} from "morpho-blue/libraries/MarketParamsLib.sol";
-import {AggregatorV3Interface} from "morpho-blue-oracles/morpho-chainlink/libraries/ChainlinkDataFeedLib.sol";
+import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
+import {IOracle} from "@forks/morpho/IOracle.sol";
+import {MarketParamsLib} from "@forks/morpho/MarketParamsLib.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TestAccount, TestAccountLib} from "./libraries/TestAccountLib.t.sol";
@@ -34,7 +32,7 @@ import {PerpMath} from "../src/libraries/PerpMath.sol";
 
 import "forge-std/console.sol";
 
-import {IController} from "squeeth-monorepo/interfaces/IController.sol";
+// import {IController} from "squeeth-monorepo/interfaces/IController.sol";
 
 contract PutETHTest is Test, Deployers {
     using PoolIdLibrary for PoolId;
@@ -83,21 +81,19 @@ contract PutETHTest is Test, Deployers {
     }
 
     function test_osqth_operations() public {
-        IController powerTokenController = IController(
-            0x64187ae08781B09368e6253F9E94951243A493D5
-        );
-        vm.startPrank(alice.addr);
-        console.log(OSQTH.balanceOf(alice.addr));
-        deal(alice.addr, 100 ether);
-
-        uint256 vaultId = 70;
-        powerTokenController.mintWPowerPerpAmount{value: 1 ether}(
-            vaultId,
-            1 ether,
-            0
-        );
-
-        vm.stopPrank(alice.addr);
+        // IController powerTokenController = IController(
+        //     0x64187ae08781B09368e6253F9E94951243A493D5
+        // );
+        // vm.startPrank(alice.addr);
+        // console.log(OSQTH.balanceOf(alice.addr));
+        // deal(alice.addr, 100 ether);
+        // uint256 vaultId = 70;
+        // powerTokenController.mintWPowerPerpAmount{value: 1 ether}(
+        //     vaultId,
+        //     1 ether,
+        //     0
+        // );
+        // vm.stopPrank(alice.addr);
     }
 
     function test_deposit() public {
