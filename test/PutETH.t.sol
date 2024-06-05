@@ -36,6 +36,8 @@ import {MorphoChainlinkOracleV2} from "@forks/morpho-oracles/MorphoChainlinkOrac
 import {AggregatorV3Interface} from "@forks/morpho-oracles/AggregatorV3Interface.sol";
 import {IERC4626} from "@forks/morpho-oracles/IERC4626.sol";
 
+import {IChainlinkOracle} from "@forks/morpho-oracles/IChainlinkOracle.sol";
+
 import "forge-std/console.sol";
 
 contract PutETHTest is Test, Deployers {
@@ -70,7 +72,6 @@ contract PutETHTest is Test, Deployers {
         WETH = TestERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
         vm.label(address(WETH), "WETH");
 
-        init_morpho_oracle();
         create_and_seed_morpho_market();
         init_hook();
 
@@ -107,10 +108,10 @@ contract PutETHTest is Test, Deployers {
         assertEq(USDC.balanceOf(alice.addr), 0);
 
         // ** Borrow
-        uint256 borrowAmount = 1 ether;
+        uint256 borrowAmount = 2 ether;
         (, uint256 shares) = morpho.borrow(
             morpho.idToMarketParams(marketId),
-            borrowAmount / 10,
+            borrowAmount,
             0,
             alice.addr,
             alice.addr
@@ -266,15 +267,16 @@ contract PutETHTest is Test, Deployers {
         marketParams.loanToken = address(WSTETH);
         marketParams.collateralToken = address(USDC);
         marketParams.lltv = 915000000000000000;
-        console.log("> marketParams.oracle", marketParams.oracle);
+        // console.log("> marketParams.oracle", marketParams.oracle);
+        modifyMockOracle(
+            address(IChainlinkOracle(marketParams.oracle)),
+            222866057499442860000000000000000000000000000 //4487 usdc for eth
+        );
 
         vm.prank(marketCreator.addr);
         morpho.createMarket(marketParams);
 
         marketId = MarketParamsLib.id(marketParams);
-
-        // uint256 collateralPrice = IOracle(marketParams.oracle).price();
-        // console.log("> collateralPrice", collateralPrice);
 
         // ** Deposit liquidity
         vm.startPrank(morphoLpProvider.addr);
@@ -300,23 +302,39 @@ contract PutETHTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function init_morpho_oracle() internal {
-        IMorphoChainlinkOracleV2Factory morphoOracleFactory = IMorphoChainlinkOracleV2Factory(
-                0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
-            );
-        morphoOracle = morphoOracleFactory.createMorphoChainlinkOracleV2(
-            IERC4626(0x0000000000000000000000000000000000000000),
-            1,
-            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-            18,
-            IERC4626(0x0000000000000000000000000000000000000000),
-            1,
-            AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46),
-            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
-            6,
-            "0x"
+    function modifyMockOracle(
+        address oracle,
+        uint256 newPrice
+    ) internal returns (IChainlinkOracle iface) {
+        iface = IChainlinkOracle(oracle);
+        address vault = address(IChainlinkOracle(oracle).VAULT());
+        uint256 conversionSample = IChainlinkOracle(oracle)
+            .VAULT_CONVERSION_SAMPLE();
+        address baseFeed1 = address(IChainlinkOracle(oracle).BASE_FEED_1());
+        address baseFeed2 = address(IChainlinkOracle(oracle).BASE_FEED_2());
+        address quoteFeed1 = address(IChainlinkOracle(oracle).QUOTE_FEED_1());
+        address quoteFeed2 = address(IChainlinkOracle(oracle).QUOTE_FEED_2());
+        uint256 scaleFactor = IChainlinkOracle(oracle).SCALE_FACTOR();
+
+        uint256 priceBefore = IChainlinkOracle(oracle).price();
+        console.log("> priceBefore", priceBefore);
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(iface.price.selector),
+            abi.encode(newPrice)
         );
-        console.log(morphoOracle.price());
+        assertEq(iface.price(), newPrice);
+        assertEq(address(iface.VAULT()), vault);
+        assertEq(iface.VAULT_CONVERSION_SAMPLE(), conversionSample);
+        assertEq(address(iface.BASE_FEED_1()), baseFeed1);
+        assertEq(address(iface.BASE_FEED_2()), baseFeed2);
+        assertEq(address(iface.QUOTE_FEED_1()), quoteFeed1);
+        assertEq(address(iface.QUOTE_FEED_2()), quoteFeed2);
+        assertEq(iface.SCALE_FACTOR(), scaleFactor);
+
+        uint256 priceAfter = IChainlinkOracle(oracle).price();
+        console.log("> priceAfter", priceAfter);
+
+        return iface;
     }
 }
