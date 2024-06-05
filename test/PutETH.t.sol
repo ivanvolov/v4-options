@@ -30,9 +30,13 @@ import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
 import {PutETH} from "../src/PutETH.sol";
 import {PerpMath} from "../src/libraries/PerpMath.sol";
 
-import "forge-std/console.sol";
-
 import {IController} from "@forks/squeeth-monorepo/core/IController.sol";
+import {IMorphoChainlinkOracleV2Factory} from "@forks/morpho-oracles/IMorphoChainlinkOracleV2Factory.sol";
+import {MorphoChainlinkOracleV2} from "@forks/morpho-oracles/MorphoChainlinkOracleV2.sol";
+import {AggregatorV3Interface} from "@forks/morpho-oracles/AggregatorV3Interface.sol";
+import {IERC4626} from "@forks/morpho-oracles/IERC4626.sol";
+
+import "forge-std/console.sol";
 
 contract PutETHTest is Test, Deployers {
     using PoolIdLibrary for PoolId;
@@ -66,6 +70,7 @@ contract PutETHTest is Test, Deployers {
         WETH = TestERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
         vm.label(address(WETH), "WETH");
 
+        init_morpho_oracle();
         create_and_seed_morpho_market();
         init_hook();
 
@@ -222,6 +227,8 @@ contract PutETHTest is Test, Deployers {
 
     IMorpho morpho;
 
+    MorphoChainlinkOracleV2 morphoOracle;
+
     function init_hook() internal {
         router = new HookEnabledSwapRouter(manager);
 
@@ -291,5 +298,25 @@ contract PutETHTest is Test, Deployers {
         assertEq(p.collateral, 0);
         assertEq(WETH.balanceOf(morphoLpProvider.addr), 0);
         vm.stopPrank();
+    }
+
+    function init_morpho_oracle() internal {
+        IMorphoChainlinkOracleV2Factory morphoOracleFactory = IMorphoChainlinkOracleV2Factory(
+                0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
+            );
+        morphoOracle = morphoOracleFactory.createMorphoChainlinkOracleV2(
+            IERC4626(0x0000000000000000000000000000000000000000),
+            1,
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            18,
+            IERC4626(0x0000000000000000000000000000000000000000),
+            1,
+            AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46),
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            6,
+            "0x"
+        );
+        console.log(morphoOracle.price());
     }
 }

@@ -31,6 +31,12 @@ import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
 import {CallETH} from "../src/CallETH.sol";
 import {PerpMath} from "../src/libraries/PerpMath.sol";
 
+import {IMorphoChainlinkOracleV2Factory} from "@forks/morpho-oracles/IMorphoChainlinkOracleV2Factory.sol";
+import {MorphoChainlinkOracleV2} from "@forks/morpho-oracles/MorphoChainlinkOracleV2.sol";
+import {AggregatorV3Interface} from "@forks/morpho-oracles/AggregatorV3Interface.sol";
+import {IMorphoChainlinkOracleV2} from "@forks/morpho-oracles/IMorphoChainlinkOracleV2.sol";
+import {IERC4626} from "@forks/morpho-oracles/IERC4626.sol";
+
 import "forge-std/console.sol";
 
 contract CallETHTest is Test, Deployers {
@@ -56,6 +62,16 @@ contract CallETHTest is Test, Deployers {
         alice = TestAccountLib.createTestAccount("alice");
         swapper = TestAccountLib.createTestAccount("swapper");
 
+        WSTETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+        vm.label(address(WSTETH), "WSTETH");
+        USDC = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        vm.label(address(USDC), "USDC");
+        OSQTH = TestERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
+        vm.label(address(OSQTH), "OSQTH");
+        WETH = TestERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+        vm.label(address(WETH), "WETH");
+
+        init_morpho_oracle();
         create_and_seed_morpho_market();
         init_hook();
 
@@ -278,6 +294,8 @@ contract CallETHTest is Test, Deployers {
 
     IMorpho morpho;
 
+    MorphoChainlinkOracleV2 morphoOracle;
+
     function init_hook() internal {
         router = new HookEnabledSwapRouter(manager);
 
@@ -310,15 +328,6 @@ contract CallETHTest is Test, Deployers {
         marketCreator = TestAccountLib.createTestAccount("marketCreator");
         morphoLpProvider = TestAccountLib.createTestAccount("morphoLpProvider");
 
-        WSTETH = TestERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-        vm.label(address(WSTETH), "WSTETH");
-        USDC = TestERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-        vm.label(address(USDC), "USDC");
-        OSQTH = TestERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
-        vm.label(address(OSQTH), "OSQTH");
-        WETH = TestERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-        vm.label(address(WETH), "WETH");
-
         morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
         MarketParams memory marketParams = morpho.idToMarketParams(
@@ -338,8 +347,54 @@ contract CallETHTest is Test, Deployers {
         assertEq(marketParamsOut.irm, marketParams.irm);
         assertEq(marketParamsOut.lltv, marketParams.lltv);
 
-        // uint256 collateralPrice = IOracle(marketParams.oracle).price();
-        // console.log("> collateralPrice", collateralPrice);
+        console.log("> oracle preparation", marketParamsOut.oracle);
+        console.log(
+            address(
+                IMorphoChainlinkOracleV2(marketParamsOut.oracle).BASE_VAULT()
+            )
+        );
+        console.log(
+            IMorphoChainlinkOracleV2(marketParamsOut.oracle)
+                .BASE_VAULT_CONVERSION_SAMPLE()
+        );
+
+        console.log(
+            address(
+                IMorphoChainlinkOracleV2(marketParamsOut.oracle).QUOTE_VAULT()
+            )
+        );
+
+        console.log(
+            IMorphoChainlinkOracleV2(marketParamsOut.oracle)
+                .QUOTE_VAULT_CONVERSION_SAMPLE()
+        );
+
+        console.log(
+            address(
+                IMorphoChainlinkOracleV2(marketParamsOut.oracle).BASE_FEED_1()
+            )
+        );
+
+        console.log(
+            address(
+                IMorphoChainlinkOracleV2(marketParamsOut.oracle).BASE_FEED_2()
+            )
+        );
+
+        console.log(
+            address(
+                IMorphoChainlinkOracleV2(marketParamsOut.oracle).QUOTE_FEED_1()
+            )
+        );
+
+        console.log(
+            address(
+                IMorphoChainlinkOracleV2(marketParamsOut.oracle).QUOTE_FEED_2()
+            )
+        );
+
+        uint256 collateralPrice = IOracle(marketParams.oracle).price();
+        console.log("> collateralPrice", collateralPrice);
 
         // ** Deposit liquidity
         vm.startPrank(morphoLpProvider.addr);
@@ -365,16 +420,42 @@ contract CallETHTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function getChainlinkPrice()
-        internal
-        view
-        returns (uint256 collateralPrice)
-    {
-        MarketParams memory marketParams = morpho.idToMarketParams(
-            Id.wrap(targetMarketId)
+    function createMockOracle(
+        address mock,
+        int256 price,
+        uint256 updatedAt,
+        uint8 decimals
+    ) internal returns (IMorphoChainlinkOracleV2 iface) {
+        iface = IMorphoChainlinkOracleV2(mock);
+        vm.mockCall(
+            mock,
+            abi.encodeWithSelector(iface.latestRoundData.selector),
+            abi.encode(0, price, 0, updatedAt, 0)
         );
+        vm.mockCall(
+            mock,
+            abi.encodeWithSelector(iface.decimals.selector),
+            abi.encode(decimals)
+        );
+    }
 
-        collateralPrice = IOracle(marketParams.oracle).price();
-        console.log("> collateralPrice", collateralPrice);
+    function init_morpho_oracle() internal {
+        IMorphoChainlinkOracleV2Factory morphoOracleFactory = IMorphoChainlinkOracleV2Factory(
+                0x3A7bB36Ee3f3eE32A60e9f2b33c1e5f2E83ad766
+            );
+        morphoOracle = morphoOracleFactory.createMorphoChainlinkOracleV2(
+            IERC4626(0x0000000000000000000000000000000000000000),
+            1,
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            18,
+            IERC4626(0x0000000000000000000000000000000000000000),
+            1,
+            AggregatorV3Interface(0xEe9F2375b4bdF6387aa8265dD4FB8F16512A1d46),
+            AggregatorV3Interface(0x0000000000000000000000000000000000000000),
+            6,
+            "0x"
+        );
+        console.log("> collateralPrice", morphoOracle.price());
     }
 }
