@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import {ERC721} from "solmate/tokens/ERC721.sol";
 
 import {IERC20Minimal as IERC20} from "v4-core/interfaces/external/IERC20Minimal.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
 
@@ -22,6 +23,9 @@ import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
 import {BaseHook} from "./forks/BaseHook.sol";
+import {IWETH} from "./forks/IWETH.sol";
+import {IController} from "@forks/squeeth-monorepo/core/IController.sol";
+import {IUniswapV3Pool} from "./forks/IUniswapV3Pool.sol";
 import {ISwapRouter} from "./forks/ISwapRouter.sol";
 import {PerpMath} from "./libraries/PerpMath.sol";
 
@@ -50,9 +54,12 @@ contract PutETH is BaseHook, ERC721 {
     }
 
     IERC20 WSTETH = IERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-    IERC20 WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IWETH WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     IERC20 USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     IERC20 OSQTH = IERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
+
+    IController constant powerTokenController =
+        IController(0x64187ae08781B09368e6253F9E94951243A493D5);
 
     bytes internal constant ZERO_BYTES = bytes("");
 
@@ -65,6 +72,8 @@ contract PutETH is BaseHook, ERC721 {
 
     uint256 private optionIdCounter = 0;
     mapping(uint256 => OptionInfo) public optionInfo;
+
+    uint256 public vaultId;
 
     function getTickLast(PoolId poolId) public view returns (int24) {
         return lastTick[poolId];
@@ -128,6 +137,8 @@ contract PutETH is BaseHook, ERC721 {
             address(morpho),
             type(uint256).max
         );
+
+        vaultId = powerTokenController.mintWPowerPerpAmount(0, 0, 0);
 
         setTickLast(key.toId(), tick);
 
@@ -389,6 +400,7 @@ contract PutETH is BaseHook, ERC721 {
         console.log(">> afterSwap");
         if (deltas.amount0() == 0 && deltas.amount1() == 0)
             revert NoSwapWillOccur();
+        //TODO: add here revert if the pool have enough liquidity but the extra operations is not possible for the current swap magnitude
 
         int24 tick = getCurrentTick(key.toId());
 
@@ -419,11 +431,31 @@ contract PutETH is BaseHook, ERC721 {
             // );
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
-            // console.logInt(deltas.amount0());
+            console.logInt(deltas.amount0());
             // console.logInt(deltas.amount1());
-
+            console.log("!");
+            morpho.borrow(
+                morpho.idToMarketParams(marketId),
+                1 ether / 10,
+                0,
+                address(this),
+                address(this)
+            );
+            console.log("!");
+            // uint256 wethAmountOut = swapExactInput(
+            //     address(WSTETH),
+            //     address(WETH),
+            //     uint256(int256(-deltas.amount0())),
+            //     WSTETH_WETH_POOL_FEE
+            // );
+            // WETH.withdraw(wethAmountOut);
+            // powerTokenController.deposit{value: wethAmountOut}(vaultId);
+            // powerTokenController.mintPowerPerpAmount(
+            //     vaultId,
+            //     wethAmountOut / 2,
+            //     0
+            // );
             // swapOSQTH_WETH_USDC(uint256(int256(deltas.amount1())));
-
             // morpho.repay(
             //     morpho.idToMarketParams(marketId),
             //     uint256(int256(deltas.amount1())),
@@ -439,6 +471,15 @@ contract PutETH is BaseHook, ERC721 {
 
     function tokenURI(uint256) public pure override returns (string memory) {
         return "";
+    }
+
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes calldata
+    ) external pure returns (bytes4) {
+        return this.onERC721Received.selector;
     }
 
     // --- Helpers ---
@@ -516,6 +557,20 @@ contract PutETH is BaseHook, ERC721 {
     function getCurrentTick(PoolId poolId) public view returns (int24) {
         (, int24 currentTick, , ) = StateLibrary.getSlot0(poolManager, poolId);
         return currentTick;
+    }
+
+    function getETH_OSQTHPriceV3() external view returns (uint256) {
+        (, int24 tick, , , , , ) = IUniswapV3Pool(
+            0x82c427AdFDf2d245Ec51D8046b41c4ee87F0d29C
+        ).slot0();
+        return PerpMath.getPriceFromTick(tick);
+    }
+
+    function getETH_USDCPriceV3() external view returns (uint256) {
+        (, int24 tick, , , , , ) = IUniswapV3Pool(
+            0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640
+        ).slot0();
+        return PerpMath.getPriceFromTick(tick);
     }
 
     function getOptionPosition(

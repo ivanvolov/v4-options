@@ -389,6 +389,7 @@ contract CallETH is BaseHook, ERC721 {
         console.log(">> afterSwap");
         if (deltas.amount0() == 0 && deltas.amount1() == 0)
             revert NoSwapWillOccur();
+        //TODO: add here revert if the pool have enough liquidity but the extra operations is not possible for the current swap magnitude
 
         int24 tick = getCurrentTick(key.toId());
 
