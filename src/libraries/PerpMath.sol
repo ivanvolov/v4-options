@@ -48,4 +48,15 @@ library PerpMath {
         if (tick < 0 && tick % tickSpacing != 0) compressed--; // round towards negative infinity
         return compressed * tickSpacing;
     }
+
+    function getAssetsBuyShares(
+        uint256 borrowShares,
+        uint256 totalBorrowShares,
+        uint256 totalBorrowAssets
+    ) internal pure returns (uint256) {
+        return
+            totalBorrowAssets == 0
+                ? 0
+                : borrowShares.mul(totalBorrowAssets).div(totalBorrowShares);
+    }
 }

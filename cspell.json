@@ -14,7 +14,7 @@
     { "name": "solidity", "path": "./cspell.dict/solidity.txt" },
     { "name": "defi", "path": "./cspell.dict/defi.txt" }
   ],
-  "words": ["calros"],
+  "words": ["calros", "devc"],
   "ignorePaths": [
     "./cspell.dict/**",
     "./node_modules/**",

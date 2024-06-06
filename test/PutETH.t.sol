@@ -146,12 +146,12 @@ contract PutETHTest is Test, Deployers {
     }
 
     function test_deposit() public {
-        uint256 amountToDeposit = 10000 * 1e6;
+        uint256 amountToDeposit = 200000 * 1e6;
         deal(address(USDC), address(alice.addr), amountToDeposit);
         vm.prank(alice.addr);
         uint256 optionId = hook.deposit(key, amountToDeposit, alice.addr);
         (uint128 liquidity, , ) = hook.getOptionPosition(key, optionId);
-        // assertEq(liquidity, 254863304324955);// TODO: uncomment in the end
+        assertEq(liquidity, 5097266086499115); // TODO: uncomment in the end
         assertEq(WSTETH.balanceOf(alice.addr), 0);
         assertEq(USDC.balanceOf(alice.addr), 0);
         assertEq(WSTETH.balanceOf(address(hook)), 0);
@@ -190,31 +190,45 @@ contract PutETHTest is Test, Deployers {
     function test_swap_price_down() public {
         test_deposit();
 
-        deal(address(WSTETH), address(swapper.addr), 1362396734796578497);
+        deal(address(WSTETH), address(swapper.addr), 11555648042810551244);
         vm.prank(swapper.addr);
         router.swap(
             key,
             IPoolManager.SwapParams(
                 true, // WSTETH -> USDC
-                (4500 * 1e6) / 10,
+                10 * 4500 * 1e6,
                 TickMath.MIN_SQRT_PRICE + 1
             ),
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
+        assertApproxEqAbs(WSTETH.balanceOf(swapper.addr), 0, 10);
+        assertApproxEqAbs(USDC.balanceOf(swapper.addr), 10 * 4500 * 1e6, 10);
+
+        assertApproxEqAbs(USDC.balanceOf(address(hook)), 10080834793, 10);
+        assertApproxEqAbs(OSQTH.balanceOf(address(hook)), 0, 10);
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 11555648042810551244000000);
+        assertApproxEqAbs(p.collateral, 100000000000, 10);
+    }
+
+    function test_swap_price_down_then_up() public {
+        test_swap_price_down();
+
+        vm.prank(swapper.addr);
+        router.swap(
+            key,
+            IPoolManager.SwapParams(
+                false, // USDC -> WSTETH
+                2311129608562110000, // 20% of 11555648042810551244
+                TickMath.MAX_SQRT_PRICE - 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
         // assertApproxEqAbs(WSTETH.balanceOf(swapper.addr), 0, 10);
-        // assertApproxEqAbs(USDC.balanceOf(swapper.addr), (4500 * 1e6) / 2, 10);
-
-        // assertApproxEqAbs(USDC.balanceOf(address(hook)), 0, 10);
-        // assertApproxEqAbs(
-        //     OSQTH.balanceOf(address(hook)),
-        //     16851686274526807531,
-        //     10
-        // );
-
-        // MorphoPosition memory p = morpho.position(marketId, address(hook));
-        // assertEq(p.borrowShares, 4513632092000000);
-        // assertApproxEqAbs(p.collateral, 50 ether, 10000);
+        // assertApproxEqAbs(USDC.balanceOf(swapper.addr), 10 * 4500 * 1e6, 10);
     }
 
     // -- Helpers --
@@ -233,11 +247,13 @@ contract PutETHTest is Test, Deployers {
     function init_hook() internal {
         router = new HookEnabledSwapRouter(manager);
 
-        address hookAddress = address(
-            uint160(
-                Hooks.AFTER_SWAP_FLAG |
-                    Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
-                    Hooks.AFTER_INITIALIZE_FLAG
+        address payable hookAddress = payable(
+            address(
+                uint160(
+                    Hooks.AFTER_SWAP_FLAG |
+                        Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
+                        Hooks.AFTER_INITIALIZE_FLAG
+                )
             )
         );
         deployCodeTo("PutETH.sol", abi.encode(manager, marketId), hookAddress);
@@ -267,7 +283,6 @@ contract PutETHTest is Test, Deployers {
         marketParams.loanToken = address(WSTETH);
         marketParams.collateralToken = address(USDC);
         marketParams.lltv = 915000000000000000;
-        // console.log("> marketParams.oracle", marketParams.oracle);
         modifyMockOracle(
             address(IChainlinkOracle(marketParams.oracle)),
             222866057499442860000000000000000000000000000 //4487 usdc for eth

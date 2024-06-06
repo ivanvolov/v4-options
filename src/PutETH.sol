@@ -24,7 +24,7 @@ import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
 import {BaseHook} from "./forks/BaseHook.sol";
 import {IWETH} from "./forks/IWETH.sol";
-import {IController} from "@forks/squeeth-monorepo/core/IController.sol";
+import {IController, Vault} from "@forks/squeeth-monorepo/core/IController.sol";
 import {IUniswapV3Pool} from "./forks/IUniswapV3Pool.sol";
 import {ISwapRouter} from "./forks/ISwapRouter.sol";
 import {PerpMath} from "./libraries/PerpMath.sol";
@@ -129,14 +129,10 @@ contract PutETH is BaseHook, ERC721 {
         WSTETH.approve(address(swapRouter), type(uint256).max);
         OSQTH.approve(address(swapRouter), type(uint256).max);
 
-        IERC20(Currency.unwrap(key.currency0)).approve(
-            address(morpho),
-            type(uint256).max
-        );
-        IERC20(Currency.unwrap(key.currency1)).approve(
-            address(morpho),
-            type(uint256).max
-        );
+        WETH.approve(address(morpho), type(uint256).max);
+        USDC.approve(address(morpho), type(uint256).max);
+
+        // OSQTH.approve(address(powerTokenController), type(uint256).max);
 
         vaultId = powerTokenController.mintWPowerPerpAmount(0, 0, 0);
 
@@ -406,9 +402,32 @@ contract PutETH is BaseHook, ERC721 {
 
         if (tick > getTickLast(key.toId())) {
             console.log(">> price go up...");
-            // console.logInt(deltas.amount0());
-            // console.logInt(deltas.amount1());
+            console.logInt(deltas.amount0());
+            console.logInt(deltas.amount1());
+            console.log(" %s", USDC.balanceOf(address(this)));
 
+            swapUSDC_OSQTHIn(uint256(int256(-deltas.amount1())));
+
+            Vault memory vault = powerTokenController.vaults(vaultId);
+
+            console.log(vault.collateralAmount);
+            console.log(vault.shortAmount);
+            console.log(OSQTH.balanceOf(address(this)));
+            uint256 collateralToWithdraw = PerpMath.getAssetsBuyShares(
+                OSQTH.balanceOf(address(this)),
+                vault.shortAmount,
+                vault.collateralAmount
+            );
+
+            console.log(collateralToWithdraw);
+
+            powerTokenController.burnPowerPerpAmount(
+                vaultId,
+                OSQTH.balanceOf(address(this)),
+                0
+            );
+
+            // buy eth
             // morpho.borrow(
             //     morpho.idToMarketParams(marketId),
             //     uint256(int256(-deltas.amount1())),
@@ -431,38 +450,31 @@ contract PutETH is BaseHook, ERC721 {
             // );
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
-            console.logInt(deltas.amount0());
+            // console.logInt(deltas.amount0());
             // console.logInt(deltas.amount1());
-            console.log("!");
             morpho.borrow(
                 morpho.idToMarketParams(marketId),
-                1 ether / 10,
+                uint256(int256(-deltas.amount0())),
                 0,
                 address(this),
                 address(this)
             );
-            console.log("!");
-            // uint256 wethAmountOut = swapExactInput(
-            //     address(WSTETH),
-            //     address(WETH),
-            //     uint256(int256(-deltas.amount0())),
-            //     WSTETH_WETH_POOL_FEE
-            // );
-            // WETH.withdraw(wethAmountOut);
-            // powerTokenController.deposit{value: wethAmountOut}(vaultId);
-            // powerTokenController.mintPowerPerpAmount(
-            //     vaultId,
-            //     wethAmountOut / 2,
-            //     0
-            // );
-            // swapOSQTH_WETH_USDC(uint256(int256(deltas.amount1())));
-            // morpho.repay(
-            //     morpho.idToMarketParams(marketId),
-            //     uint256(int256(deltas.amount1())),
-            //     0,
-            //     address(this),
-            //     ZERO_BYTES
-            // );
+            uint256 wethAmountOut = swapExactInput(
+                address(WSTETH),
+                address(WETH),
+                uint256(int256(-deltas.amount0())),
+                WSTETH_WETH_POOL_FEE
+            );
+            WETH.withdraw(wethAmountOut);
+            powerTokenController.deposit{value: wethAmountOut}(vaultId);
+            powerTokenController.mintPowerPerpAmount(
+                vaultId,
+                wethAmountOut / 2,
+                0
+            );
+            swapOSQTH_USDC_In(OSQTH.balanceOf(address(this)));
+        } else {
+            console.log(">> price not changing...");
         }
 
         setTickLast(key.toId(), tick);
@@ -481,6 +493,9 @@ contract PutETH is BaseHook, ERC721 {
     ) external pure returns (bytes4) {
         return this.onERC721Received.selector;
     }
+
+    // ** fallback for wrapped eth unwrapping
+    receive() external payable {}
 
     // --- Helpers ---
 
@@ -534,7 +549,7 @@ contract PutETH is BaseHook, ERC721 {
             );
     }
 
-    function swapOSQTH_WETH_USDC(uint256 amountOut) internal returns (uint256) {
+    function swapOSQTH_USDC_Out(uint256 amountOut) internal returns (uint256) {
         bytes memory path = abi.encodePacked(
             address(USDC),
             uint24(500),
@@ -551,6 +566,38 @@ contract PutETH is BaseHook, ERC721 {
                     amountOut: amountOut,
                     amountInMaximum: type(uint256).max
                 })
+            );
+    }
+
+    function swapOSQTH_USDC_In(uint256 amountIn) internal returns (uint256) {
+        uint256 amountOut = swapExactInput(
+            address(OSQTH),
+            address(WETH),
+            amountIn,
+            OSQTH_ETH_POOL_FEE
+        );
+        return
+            swapExactInput(
+                address(WETH),
+                address(USDC),
+                amountOut,
+                ETH_USDC_POOL_FEE
+            );
+    }
+
+    function swapUSDC_OSQTHIn(uint256 amountIn) internal returns (uint256) {
+        uint256 amountOut = swapExactInput(
+            address(USDC),
+            address(WETH),
+            amountIn,
+            ETH_USDC_POOL_FEE
+        );
+        return
+            swapExactInput(
+                address(WETH),
+                address(OSQTH),
+                amountOut,
+                OSQTH_ETH_POOL_FEE
             );
     }
 
