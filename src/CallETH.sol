@@ -221,7 +221,6 @@ contract CallETH is BaseHook, ERC721 {
 
         //** close position into WSTETH & USDC
         {
-            //TODO: How to update liquidity here?
             (
                 uint128 liquidity,
                 int24 tickLower,

@@ -30,7 +30,7 @@ import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
 import {PutETH} from "../src/PutETH.sol";
 import {PerpMath} from "../src/libraries/PerpMath.sol";
 
-import {IController} from "@forks/squeeth-monorepo/core/IController.sol";
+import {IController, Vault} from "@forks/squeeth-monorepo/core/IController.sol";
 import {IMorphoChainlinkOracleV2Factory} from "@forks/morpho-oracles/IMorphoChainlinkOracleV2Factory.sol";
 import {MorphoChainlinkOracleV2} from "@forks/morpho-oracles/MorphoChainlinkOracleV2.sol";
 import {AggregatorV3Interface} from "@forks/morpho-oracles/AggregatorV3Interface.sol";
@@ -130,6 +130,8 @@ contract PutETHTest is Test, Deployers {
             0x64187ae08781B09368e6253F9E94951243A493D5
         );
         vm.startPrank(alice.addr);
+
+        // ** Deposit OSQTH
         console.log("> OSQTH balance", OSQTH.balanceOf(alice.addr));
         deal(alice.addr, 100 ether);
 
@@ -140,8 +142,25 @@ contract PutETHTest is Test, Deployers {
         console.log("> isVaultSafe", powerTokenController.isVaultSafe(vaultId));
         powerTokenController.mintPowerPerpAmount(vaultId, 10 ether / 2, 0);
 
-        console.log("> OSQTH balance", OSQTH.balanceOf(alice.addr));
+        // console.log("> OSQTH balance", OSQTH.balanceOf(alice.addr));
         assertEq(OSQTH.balanceOf(alice.addr), 28606797160868548091);
+        assertEq(alice.addr.balance, 90 ether);
+
+        Vault memory vault = powerTokenController.vaults(vaultId);
+
+        assertEq(vault.collateralAmount, 10 ether);
+        assertEq(vault.shortAmount, OSQTH.balanceOf(alice.addr));
+
+        // ** Withdraw OSQTH
+        powerTokenController.burnWPowerPerpAmount(
+            vaultId,
+            OSQTH.balanceOf(alice.addr),
+            vault.collateralAmount
+        );
+
+        assertEq(OSQTH.balanceOf(alice.addr), 0);
+        assertEq(alice.addr.balance, 100 ether);
+
         vm.stopPrank();
     }
 
@@ -167,6 +186,30 @@ contract PutETHTest is Test, Deployers {
 
         vm.expectRevert(PutETH.NotAnOptionOwner.selector);
         hook.withdraw(key, 0, alice.addr);
+    }
+
+    function test_deposit_withdraw() public {
+        test_deposit();
+
+        vm.prank(alice.addr);
+        hook.withdraw(key, 0, alice.addr);
+
+        assertEq(USDC.balanceOf(address(hook)), 0);
+        assertEq(WETH.balanceOf(address(hook)), 0);
+        assertEq(WSTETH.balanceOf(address(hook)), 0);
+        assertEq(OSQTH.balanceOf(address(hook)), 0);
+
+        assertApproxEqAbs(WSTETH.balanceOf(alice.addr), 0, 10);
+        assertEq(USDC.balanceOf(alice.addr), 199999999999);
+        assertEq(WETH.balanceOf(alice.addr), 0);
+        assertEq(OSQTH.balanceOf(alice.addr), 0);
+
+        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
+        assertEq(liquidity, 0);
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 0);
+        assertEq(p.collateral, 0);
     }
 
     function test_swap_price_up_revert() public {
@@ -221,14 +264,49 @@ contract PutETHTest is Test, Deployers {
             key,
             IPoolManager.SwapParams(
                 false, // USDC -> WSTETH
-                2311129608562110000, // 20% of 11555648042810551244
+                231112960856211000, // x% of 11555648042810551244
                 TickMath.MAX_SQRT_PRICE - 1
             ),
             HookEnabledSwapRouter.TestSettings(false, false),
             ZERO_BYTES
         );
-        // assertApproxEqAbs(WSTETH.balanceOf(swapper.addr), 0, 10);
-        // assertApproxEqAbs(USDC.balanceOf(swapper.addr), 10 * 4500 * 1e6, 10);
+        assertApproxEqAbs(
+            WSTETH.balanceOf(swapper.addr),
+            231112960856211000,
+            10
+        );
+        assertApproxEqAbs(USDC.balanceOf(swapper.addr), 44216245243, 10);
+
+        assertApproxEqAbs(USDC.balanceOf(address(hook)), 9297080036, 10);
+        assertApproxEqAbs(OSQTH.balanceOf(address(hook)), 0, 10);
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 10653418290705234894000000);
+        assertApproxEqAbs(p.collateral, 100000000000, 10);
+    }
+
+    function test_swap_price_down_then_withdraw() public {
+        test_swap_price_down();
+
+        vm.prank(alice.addr);
+        hook.withdraw(key, 0, alice.addr);
+
+        assertEq(USDC.balanceOf(address(hook)), 0);
+        assertEq(WETH.balanceOf(address(hook)), 0);
+        assertEq(WSTETH.balanceOf(address(hook)), 0);
+        assertEq(OSQTH.balanceOf(address(hook)), 0);
+
+        assertApproxEqAbs(WSTETH.balanceOf(alice.addr), 0, 10);
+        assertEq(USDC.balanceOf(alice.addr), 206736939618);
+        assertEq(WETH.balanceOf(alice.addr), 0);
+        assertEq(OSQTH.balanceOf(alice.addr), 0);
+
+        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
+        assertEq(liquidity, 0);
+
+        MorphoPosition memory p = morpho.position(marketId, address(hook));
+        assertEq(p.borrowShares, 0);
+        assertEq(p.collateral, 0);
     }
 
     // -- Helpers --
