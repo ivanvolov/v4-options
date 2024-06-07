@@ -26,7 +26,7 @@ import {BaseHook} from "./forks/BaseHook.sol";
 import {IWETH} from "./forks/IWETH.sol";
 import {IController, Vault} from "@forks/squeeth-monorepo/core/IController.sol";
 import {ISwapRouter} from "./forks/ISwapRouter.sol";
-import {PerpMath} from "./libraries/PerpMath.sol";
+import {OptionMathLib} from "./libraries/OptionMathLib.sol";
 
 import {OptionBaseLib} from "./libraries/OptionBaseLib.sol";
 import {IOption} from "./interfaces/IOption.sol";
@@ -155,8 +155,10 @@ contract PutETH is BaseHook, ERC721, IOption {
         );
 
         int24 tickUpper = getCurrentTick(key.toId());
-        int24 tickLower = PerpMath.tickRoundDown(
-            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickUpper) / 2),
+        int24 tickLower = OptionMathLib.tickRoundDown(
+            OptionMathLib.getTickFromPrice(
+                OptionMathLib.getPriceFromTick(tickUpper) / 2
+            ),
             key.tickSpacing
         );
         console.log("> Ticks, lower/upper");
@@ -433,7 +435,7 @@ contract PutETH is BaseHook, ERC721, IOption {
             // console.log(vault.collateralAmount);
             // console.log(vault.shortAmount);
             // console.log(OSQTH.balanceOf(address(this)));
-            uint256 collateralToWithdraw = PerpMath.getAssetsBuyShares(
+            uint256 collateralToWithdraw = OptionMathLib.getAssetsBuyShares(
                 OSQTH.balanceOf(address(this)),
                 vault.shortAmount,
                 vault.collateralAmount

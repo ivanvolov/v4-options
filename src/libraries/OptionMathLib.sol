@@ -8,30 +8,15 @@ import {TickMath} from "v4-core/libraries/TickMath.sol";
 
 import "forge-std/console.sol";
 
-//TODO: Rename to perp math LIB
-library PerpMath {
+library OptionMathLib {
     using FixedPointMathLib for uint256;
 
-    // ---- ((p/(2**96))**2)*1e12
     function getPriceFromTick(int24 tick) internal pure returns (uint256) {
-        // console.log("> getPriceFromTick");
         uint256 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(tick);
-        // console.log("sqrtPriceX96", sqrtPriceX96);
-        // return uint256(1e12).div((sqrtPriceX96 * sqrtPriceX96) >> (96 * 2));
         return (sqrtPriceX96.div(2 ** 96)).mul(sqrtPriceX96.div(2 ** 96));
     }
 
-    // ---- Math.log(2*4486*1e-12)/Math.log(1.0001)
-    // ---- (Math.log(2*4486*1e-12*1e18)-Math.log(1e18))/Math.log(1.0001)
     function getTickFromPrice(uint256 price) internal pure returns (int24) {
-        // console.log("> getTickFromPrice", price);
-        // console.log(PRBMathUD60x18.ln(price * 1e18));
-        // console.logInt(
-        //     (
-        //         (int256(PRBMathUD60x18.ln(price * 1e18)) -
-        //             int256(41446531673892820000))
-        //     ) / 99995000333297
-        // );
         return
             MathHelpersLib.toInt24(
                 (

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {ISwapRouter} from "@forks/ISwapRouter.sol";
 import {IUniswapV3Pool} from "@forks/IUniswapV3Pool.sol";
-import {PerpMath} from "./PerpMath.sol";
+import {OptionMathLib} from "./OptionMathLib.sol";
 
 library OptionBaseLib {
     error UnsupportedTokenPair();
@@ -81,7 +81,7 @@ library OptionBaseLib {
 
     function getV3PoolPrice(address pool) external view returns (uint256) {
         (, int24 tick, , , , , ) = IUniswapV3Pool(pool).slot0();
-        return PerpMath.getPriceFromTick(tick);
+        return OptionMathLib.getPriceFromTick(tick);
     }
 
     //** MultiRouteSwaps

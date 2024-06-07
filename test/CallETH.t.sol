@@ -26,7 +26,7 @@ import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 
 import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
 import {CallETH} from "../src/CallETH.sol";
-import {PerpMath} from "../src/libraries/PerpMath.sol";
+import {OptionMathLib} from "../src/libraries/OptionMathLib.sol";
 import {OptionBaseLib} from "../src/libraries/OptionBaseLib.sol";
 
 import {OptionTestBase} from "./libraries/OptionTestBase.sol";
@@ -47,34 +47,31 @@ contract CallETHTest is OptionTestBase {
     }
 
     function test_morpho_blue_market() public {
-        // ** Supply collateral
         vm.startPrank(alice.addr);
-        uint256 collateralAmount = 1 ether;
-        deal(address(WSTETH), address(alice.addr), collateralAmount);
 
-        WSTETH.approve(address(morpho), type(uint256).max);
+        // ** Supply collateral
+        deal(address(WSTETH), address(alice.addr), 1 ether);
         morpho.supplyCollateral(
             morpho.idToMarketParams(marketId),
-            collateralAmount,
+            1 ether,
             alice.addr,
             ""
         );
 
-        assertEqMorphoState(alice.addr, 0, 0, collateralAmount);
-        assertEq(WSTETH.balanceOf(alice.addr), 0);
+        assertEqMorphoState(alice.addr, 0, 0, 1 ether);
+        assertEqBalanceStateZero(alice.addr);
 
         // ** Borrow
-        uint256 borrowAmount = 100 * 1e6;
         (, uint256 shares) = morpho.borrow(
             morpho.idToMarketParams(marketId),
-            borrowAmount,
+            1000 * 1e6,
             0,
             alice.addr,
             alice.addr
         );
 
-        assertEqMorphoState(alice.addr, 0, shares, collateralAmount);
-        assertEq(USDC.balanceOf(alice.addr), borrowAmount);
+        assertEqMorphoState(alice.addr, 0, shares, 1 ether);
+        assertEqBalanceState(alice.addr, 0, 1000 * 1e6);
         vm.stopPrank();
     }
 
@@ -82,16 +79,11 @@ contract CallETHTest is OptionTestBase {
         uint256 amountToDeposit = 100 ether;
         deal(address(WSTETH), address(alice.addr), amountToDeposit);
         vm.prank(alice.addr);
-        uint256 optionId = hook.deposit(key, amountToDeposit, alice.addr);
+        optionId = hook.deposit(key, amountToDeposit, alice.addr);
 
-        (uint128 liquidity, , ) = hook.getOptionPosition(key, optionId);
-        assertEq(liquidity, 11433916692172150);
-        assertEq(WSTETH.balanceOf(alice.addr), 0);
-        assertEq(USDC.balanceOf(alice.addr), 0);
-
-        assertEq(WSTETH.balanceOf(address(hook)), 0);
-        assertEq(USDC.balanceOf(address(hook)), 0);
-
+        assertOptionV4PositionLiquidity(optionId, 11433916692172150);
+        assertEqBalanceStateZero(alice.addr);
+        assertEqBalanceStateZero(address(hook));
         assertEqMorphoState(address(hook), 0, 0, amountToDeposit / 2);
     }
 
@@ -110,10 +102,7 @@ contract CallETHTest is OptionTestBase {
 
         assertEqBalanceStateZero(address(hook));
         assertEqBalanceState(alice.addr, 100 ether, 0);
-
-        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
-        assertEq(liquidity, 0);
-
+        assertOptionV4PositionLiquidity(optionId, 0);
         assertEqMorphoState(address(hook), 0, 0, 0);
     }
 
@@ -155,10 +144,7 @@ contract CallETHTest is OptionTestBase {
 
         assertEqBalanceStateZero(address(hook));
         assertEqBalanceState(alice.addr, 99999472645338963870, 0);
-
-        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
-        assertEq(liquidity, 0);
-
+        assertOptionV4PositionLiquidity(optionId, 0);
         assertEqMorphoState(address(hook), 0, 0, 0);
     }
 
@@ -199,21 +185,6 @@ contract CallETHTest is OptionTestBase {
             4487851340816804029821232973 //4487 usdc for eth
         );
 
-        // ** Deposit liquidity
-        vm.startPrank(morphoLpProvider.addr);
-        deal(address(USDC), morphoLpProvider.addr, 10000 * 1e6);
-
-        USDC.approve(address(morpho), type(uint256).max);
-        (, uint256 shares) = morpho.supply(
-            morpho.idToMarketParams(marketId),
-            10000 * 1e6,
-            0,
-            morphoLpProvider.addr,
-            ""
-        );
-
-        assertEqMorphoState(morphoLpProvider.addr, shares, 0, 0);
-        assertEq(USDC.balanceOf(morphoLpProvider.addr), 0);
-        vm.stopPrank();
+        provideLiquidityToMorpho(address(USDC), 10000 * 1e6);
     }
 }

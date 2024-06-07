@@ -34,6 +34,7 @@ abstract contract OptionTestBase is Test, Deployers {
     HookEnabledSwapRouter router;
     Id marketId;
     IMorpho morpho = IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
+    uint256 optionId;
 
     function labelTokens() public {
         WSTETH = TestERC20(OptionBaseLib.WSTETH);
@@ -52,7 +53,9 @@ abstract contract OptionTestBase is Test, Deployers {
 
         vm.startPrank(alice.addr);
         WSTETH.approve(address(hook), type(uint256).max);
+        WSTETH.approve(address(morpho), type(uint256).max);
         USDC.approve(address(hook), type(uint256).max);
+        USDC.approve(address(morpho), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
@@ -166,6 +169,24 @@ abstract contract OptionTestBase is Test, Deployers {
         console.log("> priceAfter", priceAfter);
 
         return iface;
+    }
+
+    function provideLiquidityToMorpho(address asset, uint256 amount) internal {
+        vm.startPrank(morphoLpProvider.addr);
+        deal(asset, morphoLpProvider.addr, amount);
+
+        TestERC20(asset).approve(address(morpho), type(uint256).max);
+        (, uint256 shares) = morpho.supply(
+            morpho.idToMarketParams(marketId),
+            amount,
+            0,
+            morphoLpProvider.addr,
+            ""
+        );
+
+        assertEqMorphoState(morphoLpProvider.addr, shares, 0, 0);
+        assertEqBalanceStateZero(morphoLpProvider.addr);
+        vm.stopPrank();
     }
 
     // -- Custom assertions -- //

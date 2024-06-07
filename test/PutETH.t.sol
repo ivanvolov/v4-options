@@ -57,31 +57,28 @@ contract PutETHTest is OptionTestBase {
         vm.startPrank(alice.addr);
 
         // ** Supply collateral
-        uint256 collateralAmount = 10000 * 1e6;
-        deal(address(USDC), address(alice.addr), collateralAmount);
-        USDC.approve(address(morpho), type(uint256).max);
+        deal(address(USDC), address(alice.addr), 10000 * 1e6);
         morpho.supplyCollateral(
             morpho.idToMarketParams(marketId),
-            collateralAmount,
+            10000 * 1e6,
             alice.addr,
             ""
         );
 
-        assertEqMorphoState(alice.addr, 0, 0, collateralAmount);
+        assertEqMorphoState(alice.addr, 0, 0, 10000 * 1e6);
         assertEq(USDC.balanceOf(alice.addr), 0);
 
         // ** Borrow
-        uint256 borrowAmount = 2 ether;
         (, uint256 shares) = morpho.borrow(
             morpho.idToMarketParams(marketId),
-            borrowAmount,
+            2 ether,
             0,
             alice.addr,
             alice.addr
         );
 
-        assertEqMorphoState(alice.addr, 0, shares, collateralAmount);
-        assertEq(WSTETH.balanceOf(alice.addr), borrowAmount);
+        assertEqMorphoState(alice.addr, 0, shares, 10000 * 1e6);
+        assertEq(WSTETH.balanceOf(alice.addr), 2 ether);
         vm.stopPrank();
     }
 
@@ -92,22 +89,26 @@ contract PutETHTest is OptionTestBase {
         vm.startPrank(alice.addr);
 
         // ** Deposit OSQTH
-        console.log("> OSQTH balance", OSQTH.balanceOf(alice.addr));
+        assertEqBalanceStateZero(alice.addr);
         deal(alice.addr, 100 ether);
 
         uint256 vaultId = powerTokenController.mintWPowerPerpAmount(0, 0, 0);
         powerTokenController.deposit{value: 10 ether}(vaultId);
-        console.log("> OSQTH price", getETH_OSQTHPriceV3() / 1e18);
-        console.log("> ETH price", (1e12 * 1e18) / getETH_USDCPriceV3());
-        console.log("> isVaultSafe", powerTokenController.isVaultSafe(vaultId));
         powerTokenController.mintPowerPerpAmount(vaultId, 10 ether / 2, 0);
 
-        // console.log("> OSQTH balance", OSQTH.balanceOf(alice.addr));
-        assertEq(OSQTH.balanceOf(alice.addr), 28606797160868548091);
-        assertEq(alice.addr.balance, 90 ether);
+        console.log("> OSQTH price", getETH_OSQTHPriceV3() / 1e18);
+        console.log("> ETH price", (1e12 * 1e18) / getETH_USDCPriceV3());
+
+        assertEqBalanceState(
+            alice.addr,
+            0,
+            0,
+            0,
+            28606797160868548091,
+            90 ether
+        );
 
         Vault memory vault = powerTokenController.vaults(vaultId);
-
         assertEq(vault.collateralAmount, 10 ether);
         assertEq(vault.shortAmount, OSQTH.balanceOf(alice.addr));
 
@@ -118,9 +119,7 @@ contract PutETHTest is OptionTestBase {
             vault.collateralAmount
         );
 
-        assertEq(OSQTH.balanceOf(alice.addr), 0);
-        assertEq(alice.addr.balance, 100 ether);
-
+        assertEqBalanceState(alice.addr, 0, 0, 0, 0, 100 ether);
         vm.stopPrank();
     }
 
@@ -128,10 +127,9 @@ contract PutETHTest is OptionTestBase {
         uint256 amountToDeposit = 200000 * 1e6;
         deal(address(USDC), address(alice.addr), amountToDeposit);
         vm.prank(alice.addr);
-        uint256 optionId = hook.deposit(key, amountToDeposit, alice.addr);
-        (uint128 liquidity, , ) = hook.getOptionPosition(key, optionId);
+        optionId = hook.deposit(key, amountToDeposit, alice.addr);
 
-        assertEq(liquidity, 5097266086499115);
+        assertOptionV4PositionLiquidity(optionId, 5097266086499115);
         assertEqBalanceStateZero(alice.addr);
         assertEqMorphoState(address(hook), 0, 0, amountToDeposit / 2);
     }
@@ -151,10 +149,7 @@ contract PutETHTest is OptionTestBase {
 
         assertEqBalanceStateZero(address(hook));
         assertEqBalanceState(alice.addr, 0, 200000 * 1e6, 0, 0);
-
-        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
-        assertEq(liquidity, 0);
-
+        assertOptionV4PositionLiquidity(optionId, 0);
         assertEqMorphoState(address(hook), 0, 0, 0);
     }
 
@@ -205,10 +200,7 @@ contract PutETHTest is OptionTestBase {
 
         assertEqBalanceStateZero(address(hook));
         assertEqBalanceState(alice.addr, 0, 206736939618);
-
-        (uint128 liquidity, , ) = hook.getOptionPosition(key, 0);
-        assertEq(liquidity, 0);
-
+        assertOptionV4PositionLiquidity(optionId, 0);
         assertEqMorphoState(address(hook), 0, 0, 0);
     }
 
@@ -249,21 +241,6 @@ contract PutETHTest is OptionTestBase {
             222866057499442860000000000000000000000000000 //4487 usdc for eth
         );
 
-        // ** Deposit liquidity
-        vm.startPrank(morphoLpProvider.addr);
-        deal(address(WSTETH), morphoLpProvider.addr, 100 * 1e18);
-
-        WSTETH.approve(address(morpho), type(uint256).max);
-        (, uint256 shares) = morpho.supply(
-            morpho.idToMarketParams(marketId),
-            100 * 1e18,
-            0,
-            morphoLpProvider.addr,
-            ""
-        );
-
-        assertEqMorphoState(morphoLpProvider.addr, shares, 0, 0);
-        assertEqBalanceStateZero(morphoLpProvider.addr);
-        vm.stopPrank();
+        provideLiquidityToMorpho(address(WSTETH), 100 * 1e18);
     }
 }

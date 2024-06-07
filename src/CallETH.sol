@@ -22,7 +22,7 @@ import {BeforeSwapDelta, toBeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
 import {BaseHook} from "./forks/BaseHook.sol";
-import {PerpMath} from "./libraries/PerpMath.sol";
+import {OptionMathLib} from "./libraries/OptionMathLib.sol";
 
 import {OptionBaseLib} from "./libraries/OptionBaseLib.sol";
 import {IOption} from "./interfaces/IOption.sol";
@@ -150,8 +150,10 @@ contract CallETH is BaseHook, ERC721, IOption {
         );
 
         int24 tickLower = getCurrentTick(key.toId());
-        int24 tickUpper = PerpMath.tickRoundDown(
-            PerpMath.getTickFromPrice(PerpMath.getPriceFromTick(tickLower) * 2),
+        int24 tickUpper = OptionMathLib.tickRoundDown(
+            OptionMathLib.getTickFromPrice(
+                OptionMathLib.getPriceFromTick(tickLower) * 2
+            ),
             key.tickSpacing
         );
         console.log("> Ticks, lower/upper");
