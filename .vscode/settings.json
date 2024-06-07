@@ -5,10 +5,14 @@
     "**/cache": true,
     "**/external": true,
     // "**/.vscode": true,
+    "**/.github": true,
+    "**/cspell.dict": true,
+    "**/out": true,
     "**/.git": true
   },
   "search.exclude": {
     "**/node_modules": true,
+    "**/out": true,
     "**/.git": true,
     "**/lib": true
   },

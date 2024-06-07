@@ -8,6 +8,7 @@ import {TickMath} from "v4-core/libraries/TickMath.sol";
 
 import "forge-std/console.sol";
 
+//TODO: Rename to perp math LIB
 library PerpMath {
     using FixedPointMathLib for uint256;
 

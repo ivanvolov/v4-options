@@ -25,22 +25,13 @@ import {BaseHook} from "./forks/BaseHook.sol";
 import {PerpMath} from "./libraries/PerpMath.sol";
 
 import {OptionBaseLib} from "./libraries/OptionBaseLib.sol";
+import {IOption} from "./interfaces/IOption.sol";
 
 import "forge-std/console.sol";
 
-contract CallETH is BaseHook, ERC721 {
+contract CallETH is BaseHook, ERC721, IOption {
     using CurrencySettleTake for Currency;
     using PoolIdLibrary for PoolKey;
-
-    error ZeroLiquidity();
-
-    error AddLiquidityThroughHook();
-
-    error InRange();
-
-    error NotAnOptionOwner();
-
-    error NoSwapWillOccur();
 
     struct OptionInfo {
         uint256 amount;
@@ -50,10 +41,10 @@ contract CallETH is BaseHook, ERC721 {
         uint256 created;
     }
 
-    IERC20 WSTETH = IERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-    IERC20 WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 OSQTH = IERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
+    IERC20 WSTETH = IERC20(OptionBaseLib.WSTETH);
+    IERC20 WETH = IERC20(OptionBaseLib.WETH);
+    IERC20 USDC = IERC20(OptionBaseLib.USDC);
+    IERC20 OSQTH = IERC20(OptionBaseLib.OSQTH);
 
     bytes internal constant ZERO_BYTES = bytes("");
 

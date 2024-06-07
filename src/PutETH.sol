@@ -29,22 +29,13 @@ import {ISwapRouter} from "./forks/ISwapRouter.sol";
 import {PerpMath} from "./libraries/PerpMath.sol";
 
 import {OptionBaseLib} from "./libraries/OptionBaseLib.sol";
+import {IOption} from "./interfaces/IOption.sol";
 
 import "forge-std/console.sol";
 
-contract PutETH is BaseHook, ERC721 {
+contract PutETH is BaseHook, ERC721, IOption {
     using CurrencySettleTake for Currency;
     using PoolIdLibrary for PoolKey;
-
-    error ZeroLiquidity();
-
-    error AddLiquidityThroughHook();
-
-    error InRange();
-
-    error NotAnOptionOwner();
-
-    error NoSwapWillOccur();
 
     struct OptionInfo {
         uint256 amount;
