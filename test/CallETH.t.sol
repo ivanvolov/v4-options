@@ -2,6 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
+import "forge-std/console.sol";
 
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
@@ -32,10 +33,9 @@ import {CallETH} from "../src/CallETH.sol";
 import {PerpMath} from "../src/libraries/PerpMath.sol";
 
 import {IChainlinkOracle} from "@forks/morpho-oracles/IChainlinkOracle.sol";
+import {OptionTestBase} from "./libraries/OptionTestBase.sol";
 
-import "forge-std/console.sol";
-
-contract CallETHTest is Test, Deployers {
+contract CallETHTest is Test, Deployers, OptionTestBase {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
     using TestAccountLib for TestAccount;

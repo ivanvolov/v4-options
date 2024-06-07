@@ -28,7 +28,6 @@ import {Deployers} from "v4-core-test/utils/Deployers.sol";
 
 import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
 import {PutETH} from "../src/PutETH.sol";
-import {PerpMath} from "../src/libraries/PerpMath.sol";
 
 import {IController, Vault} from "@forks/squeeth-monorepo/core/IController.sol";
 import {IMorphoChainlinkOracleV2Factory} from "@forks/morpho-oracles/IMorphoChainlinkOracleV2Factory.sol";
@@ -37,10 +36,11 @@ import {AggregatorV3Interface} from "@forks/morpho-oracles/AggregatorV3Interface
 import {IERC4626} from "@forks/morpho-oracles/IERC4626.sol";
 
 import {IChainlinkOracle} from "@forks/morpho-oracles/IChainlinkOracle.sol";
+import {OptionTestBase} from "./libraries/OptionTestBase.sol";
 
 import "forge-std/console.sol";
 
-contract PutETHTest is Test, Deployers {
+contract PutETHTest is Test, Deployers, OptionTestBase {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
     using TestAccountLib for TestAccount;
@@ -137,8 +137,8 @@ contract PutETHTest is Test, Deployers {
 
         uint256 vaultId = powerTokenController.mintWPowerPerpAmount(0, 0, 0);
         powerTokenController.deposit{value: 10 ether}(vaultId);
-        console.log("> OSQTH price", hook.getETH_OSQTHPriceV3() / 1e18);
-        console.log("> ETH price", (1e12 * 1e18) / hook.getETH_USDCPriceV3());
+        console.log("> OSQTH price", getETH_OSQTHPriceV3() / 1e18);
+        console.log("> ETH price", (1e12 * 1e18) / getETH_USDCPriceV3());
         console.log("> isVaultSafe", powerTokenController.isVaultSafe(vaultId));
         powerTokenController.mintPowerPerpAmount(vaultId, 10 ether / 2, 0);
 
