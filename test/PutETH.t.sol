@@ -2,47 +2,24 @@
 pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
-
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-
-import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
-import {IOracle} from "@forks/morpho/IOracle.sol";
+import "forge-std/console.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
-import {TestAccount, TestAccountLib} from "./libraries/TestAccountLib.t.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
-import {Position} from "v4-core/libraries/Position.sol";
-import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
+import {HookEnabledSwapRouter} from "@test/libraries/HookEnabledSwapRouter.sol";
+import {OptionTestBase} from "@test/libraries/OptionTestBase.sol";
 
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
+import {PutETH} from "@src/PutETH.sol";
 
-import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
-
-import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
-import {PutETH} from "../src/PutETH.sol";
-import {OptionBaseLib} from "../src/libraries/OptionBaseLib.sol";
-
-import {IController, Vault} from "@forks/squeeth-monorepo/core/IController.sol";
-import {IMorphoChainlinkOracleV2Factory} from "@forks/morpho-oracles/IMorphoChainlinkOracleV2Factory.sol";
-import {MorphoChainlinkOracleV2} from "@forks/morpho-oracles/MorphoChainlinkOracleV2.sol";
-import {AggregatorV3Interface} from "@forks/morpho-oracles/AggregatorV3Interface.sol";
-import {IERC4626} from "@forks/morpho-oracles/IERC4626.sol";
-
-import {OptionTestBase} from "./libraries/OptionTestBase.sol";
+import {IController, Vault} from "@forks/squeeth-monorepo/IController.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
-
-import "forge-std/console.sol";
 
 //TODO: add here my mail and some credentials to bee cool
 contract PutETHTest is OptionTestBase {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
-    using TestAccountLib for TestAccount;
 
     function setUp() public {
         deployFreshManagerAndRouters();

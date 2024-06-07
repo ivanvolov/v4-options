@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {ISwapRouter} from "@forks/ISwapRouter.sol";
 import {IUniswapV3Pool} from "@forks/IUniswapV3Pool.sol";
-import {OptionMathLib} from "./OptionMathLib.sol";
+import {OptionMathLib} from "@src/libraries/OptionMathLib.sol";
 
 library OptionBaseLib {
     error UnsupportedTokenPair();

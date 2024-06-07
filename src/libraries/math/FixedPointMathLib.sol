@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
-// interface IDynamicStorage {
-//     function tokenDecimals(uint256) external view returns (uint8);
-// }
-
 // *** @notice Arithmetic library with operations for fixed-point numbers.
 // *** @author Inspired by Solmate (https://github.com/transmissions11/solmate/blob/main/src/utils/FixedPointMathLib.sol)
 library FixedPointMathLib {

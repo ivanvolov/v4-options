@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-import "./math/MathHelpersLib.sol";
-import "./math/FixedPointMathLib.sol";
-import "./math/PRBMathUD60x18.sol";
-import {TickMath} from "v4-core/libraries/TickMath.sol";
+pragma solidity ^0.8.25;
 
 import "forge-std/console.sol";
+
+import {TickMath} from "v4-core/libraries/TickMath.sol";
+import "@src/libraries/math/FixedPointMathLib.sol";
+import "@src/libraries/math/PRBMathUD60x18.sol";
 
 library OptionMathLib {
     using FixedPointMathLib for uint256;
@@ -18,7 +17,7 @@ library OptionMathLib {
 
     function getTickFromPrice(uint256 price) internal pure returns (int24) {
         return
-            MathHelpersLib.toInt24(
+            toInt24(
                 (
                     (int256(PRBMathUD60x18.ln(price * 1e18)) -
                         int256(41446531673892820000))
@@ -44,5 +43,10 @@ library OptionMathLib {
             totalBorrowAssets == 0
                 ? 0
                 : borrowShares.mul(totalBorrowAssets).div(totalBorrowShares);
+    }
+
+    function toInt24(int256 value) internal pure returns (int24) {
+        require(value >= type(int24).min && value <= type(int24).max, "MH1");
+        return int24(value);
     }
 }

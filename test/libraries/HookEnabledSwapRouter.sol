@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.25;
+
+import {Test} from "forge-std/Test.sol";
+import "forge-std/console.sol";
 
 import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
@@ -7,8 +10,6 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolTestBase} from "v4-core/test/PoolTestBase.sol";
-import {Test} from "forge-std/Test.sol";
-import "forge-std/console.sol";
 import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
 
 contract HookEnabledSwapRouter is PoolTestBase {
@@ -69,6 +70,7 @@ contract HookEnabledSwapRouter is PoolTestBase {
 
         console.log("> amount0", uint256(int256(delta.amount0())));
         console.log("> amount1", uint256(int256(delta.amount1())));
+
         // Make sure you ve added liquidity to the test pool!
         if (BalanceDelta.unwrap(delta) == 0) revert NoSwapOccurred();
 

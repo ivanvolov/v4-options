@@ -8,6 +8,7 @@
     "**/.github": true,
     "**/cspell.dict": true,
     "**/out": true,
+    "**/lib": true,
     "**/.git": true
   },
   "search.exclude": {

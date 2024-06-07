@@ -4,38 +4,20 @@ pragma solidity ^0.8.25;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import {IHooks} from "v4-core/interfaces/IHooks.sol";
-import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
-import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-
-import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
-
 import {Hooks} from "v4-core/libraries/Hooks.sol";
-import {TestAccount, TestAccountLib} from "./libraries/TestAccountLib.t.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
-import {Position} from "v4-core/libraries/Position.sol";
-import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
+import {HookEnabledSwapRouter} from "@test/libraries/HookEnabledSwapRouter.sol";
+import {OptionTestBase} from "@test/libraries/OptionTestBase.sol";
 
-import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
+import {CallETH} from "@src/CallETH.sol";
 
-import {TestERC20} from "v4-core/test/TestERC20.sol";
-import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
-
-import {HookEnabledSwapRouter} from "./libraries/HookEnabledSwapRouter.sol";
-import {CallETH} from "../src/CallETH.sol";
-import {OptionMathLib} from "../src/libraries/OptionMathLib.sol";
-import {OptionBaseLib} from "../src/libraries/OptionBaseLib.sol";
-
-import {OptionTestBase} from "./libraries/OptionTestBase.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
 
 contract CallETHTest is OptionTestBase {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
-    using TestAccountLib for TestAccount;
 
     function setUp() public {
         deployFreshManagerAndRouters();
