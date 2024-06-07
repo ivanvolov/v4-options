@@ -15,6 +15,8 @@ abstract contract BaseHook is IHooks {
     error LockFailure();
     error HookNotImplemented();
 
+    bytes internal constant ZERO_BYTES = bytes("");
+
     /// @notice The address of the pool manager
     IPoolManager public immutable poolManager;
 

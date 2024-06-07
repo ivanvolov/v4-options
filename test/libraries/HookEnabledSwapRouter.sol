@@ -68,18 +68,18 @@ contract HookEnabledSwapRouter is PoolTestBase {
 
         BalanceDelta delta = manager.swap(data.key, data.params, data.hookData);
 
-        console.log("> amount0", uint256(int256(delta.amount0())));
-        console.log("> amount1", uint256(int256(delta.amount1())));
+        // console.log("> amount0", uint256(int256(delta.amount0())));
+        // console.log("> amount1", uint256(int256(delta.amount1())));
 
         // Make sure you ve added liquidity to the test pool!
         if (BalanceDelta.unwrap(delta) == 0) revert NoSwapOccurred();
 
         if (data.params.zeroForOne) {
-            console.log(
-                "> I want to get from user",
-                Currency.unwrap(data.key.currency0)
-            );
-            console.log(uint256(int256(-delta.amount0())));
+            // console.log(
+            //     "> I want to get from user",
+            //     Currency.unwrap(data.key.currency0)
+            // );
+            // console.log(uint256(int256(-delta.amount0())));
             data.key.currency0.settle(
                 manager,
                 data.sender,
@@ -87,11 +87,11 @@ contract HookEnabledSwapRouter is PoolTestBase {
                 data.testSettings.settleUsingBurn
             );
             if (delta.amount1() > 0) {
-                console.log(
-                    "> I want to give to user",
-                    Currency.unwrap(data.key.currency1)
-                );
-                console.log(uint256(int256(delta.amount1())));
+                // console.log(
+                //     "> I want to give to user",
+                //     Currency.unwrap(data.key.currency1)
+                // );
+                // console.log(uint256(int256(delta.amount1())));
                 data.key.currency1.take(
                     manager,
                     data.sender,
@@ -100,11 +100,11 @@ contract HookEnabledSwapRouter is PoolTestBase {
                 );
             }
         } else {
-            console.log(
-                "> I want to get from user",
-                Currency.unwrap(data.key.currency1)
-            );
-            console.log(uint256(int256(-delta.amount1())));
+            // console.log(
+            //     "> I want to get from user",
+            //     Currency.unwrap(data.key.currency1)
+            // );
+            // console.log(uint256(int256(-delta.amount1())));
             data.key.currency1.settle(
                 manager,
                 data.sender,
@@ -112,11 +112,11 @@ contract HookEnabledSwapRouter is PoolTestBase {
                 data.testSettings.settleUsingBurn
             );
 
-            console.log(
-                "> I want to give to user",
-                Currency.unwrap(data.key.currency0)
-            );
-            console.log(uint256(int256(delta.amount0())));
+            // console.log(
+            //     "> I want to give to user",
+            //     Currency.unwrap(data.key.currency0)
+            // );
+            // console.log(uint256(int256(delta.amount0())));
             if (delta.amount0() > 0) {
                 data.key.currency0.take(
                     manager,

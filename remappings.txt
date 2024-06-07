@@ -17,6 +17,5 @@ v4-core-test/=lib/v4-core/test/
 v4-periphery/=lib/v4-periphery/contracts/
 solenv/=lib/squeeth-monorepo/packages/crab-netting/lib/squeeth-monorepo/packages/bull-vault/lib/solenv/
 solidity-stringutils/=lib/squeeth-monorepo/packages/crab-netting/lib/squeeth-monorepo/packages/bull-vault/lib/solenv/lib/solidity-stringutils/
-squeeth-monorepo/=lib/squeeth-monorepo/
 v3-core/=lib/squeeth-monorepo/packages/zen-bull-vault/lib/v3-core/
 v3-periphery/=lib/squeeth-monorepo/packages/zen-bull-netting/lib/v3-periphery/contracts/

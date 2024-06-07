@@ -151,8 +151,8 @@ abstract contract OptionTestBase is Test, Deployers {
         address quoteFeed2 = address(IChainlinkOracle(oracle).QUOTE_FEED_2());
         uint256 scaleFactor = IChainlinkOracle(oracle).SCALE_FACTOR();
 
-        uint256 priceBefore = IChainlinkOracle(oracle).price();
-        console.log("> priceBefore", priceBefore);
+        // uint256 priceBefore = IChainlinkOracle(oracle).price();
+        // console.log("> priceBefore", priceBefore);
         vm.mockCall(
             oracle,
             abi.encodeWithSelector(iface.price.selector),
@@ -167,8 +167,8 @@ abstract contract OptionTestBase is Test, Deployers {
         assertEq(address(iface.QUOTE_FEED_2()), quoteFeed2);
         assertEq(iface.SCALE_FACTOR(), scaleFactor);
 
-        uint256 priceAfter = IChainlinkOracle(oracle).price();
-        console.log("> priceAfter", priceAfter);
+        // uint256 priceAfter = IChainlinkOracle(oracle).price();
+        // console.log("> priceAfter", priceAfter);
 
         return iface;
     }

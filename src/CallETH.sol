@@ -43,8 +43,6 @@ contract CallETH is BaseHook, ERC721, IOption {
     IERC20 USDC = IERC20(OptionBaseLib.USDC);
     IERC20 OSQTH = IERC20(OptionBaseLib.OSQTH);
 
-    bytes internal constant ZERO_BYTES = bytes("");
-
     Id public immutable marketId;
 
     IMorpho public constant morpho =
@@ -102,7 +100,7 @@ contract CallETH is BaseHook, ERC721, IOption {
         int24 tick,
         bytes calldata
     ) external override returns (bytes4) {
-        console.log("> afterInitialize");
+        console.log(">> afterInitialize");
 
         USDC.approve(OptionBaseLib.SWAP_ROUTER, type(uint256).max);
         WETH.approve(OptionBaseLib.SWAP_ROUTER, type(uint256).max);
@@ -153,7 +151,7 @@ contract CallETH is BaseHook, ERC721, IOption {
             ),
             key.tickSpacing
         );
-        console.log("> Ticks, lower/upper");
+        console.log("Ticks, lower/upper:");
         console.logInt(tickLower);
         console.logInt(tickUpper);
 
@@ -233,7 +231,6 @@ contract CallETH is BaseHook, ERC721, IOption {
         uint256 usdcToRepay = m.totalBorrowAssets; //TODO: this is a bad huck, fix in the future
         if (usdcToRepay != 0) {
             uint256 balanceUSDC = USDC.balanceOf(address(this));
-            // console.log("> balanceUSDC", balanceUSDC);
             if (usdcToRepay > balanceUSDC) {
                 console.log("> buy USDC to repay");
                 OptionBaseLib.swapExactOutput(
@@ -275,17 +272,13 @@ contract CallETH is BaseHook, ERC721, IOption {
         int24 tickLower,
         int24 tickUpper
     ) external selfOnly returns (bytes memory) {
-        console.log(">> unlockDepositPlace");
-        // console.log(amount);
-        // console.logInt(tickLower);
-        // console.logInt(tickUpper);
+        console.log("> unlockDepositPlace");
 
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
             TickMath.getSqrtPriceAtTick(tickUpper),
             TickMath.getSqrtPriceAtTick(tickLower),
             amount
         );
-        // console.log("liquidity %s", uint256(liquidity));
 
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
@@ -297,10 +290,6 @@ contract CallETH is BaseHook, ERC721, IOption {
             }),
             ZERO_BYTES
         );
-
-        // console.log("> delta");
-        // console.logInt(delta.amount0());
-        // console.logInt(delta.amount1());
 
         if (delta.amount0() < 0) {
             if (delta.amount1() != 0) revert InRange();
@@ -332,7 +321,7 @@ contract CallETH is BaseHook, ERC721, IOption {
         int24 tickLower,
         int24 tickUpper
     ) external selfOnly returns (bytes memory) {
-        console.log(">> unlockWithdrawPlace");
+        console.log("> unlockWithdrawPlace");
 
         (BalanceDelta delta, ) = poolManager.modifyLiquidity(
             key,
@@ -380,9 +369,7 @@ contract CallETH is BaseHook, ERC721, IOption {
         int24 tick = getCurrentTick(key.toId());
 
         if (tick > getTickLast(key.toId())) {
-            console.log(">> price go up...");
-            // console.logInt(deltas.amount0());
-            // console.logInt(deltas.amount1());
+            console.log("> price go up...");
 
             morpho.borrow(
                 morpho.idToMarketParams(marketId),
@@ -403,9 +390,7 @@ contract CallETH is BaseHook, ERC721, IOption {
                 amountOut
             );
         } else if (tick < getTickLast(key.toId())) {
-            console.log(">> price go down...");
-            // console.logInt(deltas.amount0());
-            // console.logInt(deltas.amount1());
+            console.log("> price go down...");
 
             MorphoPosition memory p = morpho.position(marketId, address(this));
             if (p.borrowShares != 0) {
@@ -422,6 +407,8 @@ contract CallETH is BaseHook, ERC721, IOption {
                     ZERO_BYTES
                 );
             }
+        } else {
+            console.log("> price not changing...");
         }
 
         setTickLast(key.toId(), tick);
