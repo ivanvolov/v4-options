@@ -5,7 +5,6 @@ import "forge-std/console.sol";
 
 import {Position} from "v4-core/libraries/Position.sol";
 import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
-import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {Pool} from "v4-core/libraries/Pool.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
@@ -18,54 +17,22 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {LiquidityAmounts} from "v4-core/../test/utils/LiquidityAmounts.sol";
 import {ERC721} from "solmate/tokens/ERC721.sol";
-import {BaseHook} from "@forks/BaseHook.sol";
 import {IWETH} from "@forks/IWETH.sol";
+import {BaseOptionHook} from "@src/BaseOptionHook.sol";
 
-import {IERC20Minimal as IERC20} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
 
-contract CallETH is BaseHook, ERC721, IOption {
+contract CallETH is BaseOptionHook, ERC721 {
     using CurrencySettleTake for Currency;
     using PoolIdLibrary for PoolKey;
 
-    struct OptionInfo {
-        uint256 amount;
-        int24 tick;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 created;
-    }
-
-    IERC20 WSTETH = IERC20(OptionBaseLib.WSTETH);
-    IERC20 WETH = IERC20(OptionBaseLib.WETH);
-    IERC20 USDC = IERC20(OptionBaseLib.USDC);
-    IERC20 OSQTH = IERC20(OptionBaseLib.OSQTH);
-
-    Id public immutable marketId;
-
-    IMorpho public constant morpho =
-        IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
-
-    mapping(PoolId => int24) public lastTick;
-
-    uint256 private optionIdCounter = 0;
-    mapping(uint256 => OptionInfo) public optionInfo;
-
-    function getTickLast(PoolId poolId) public view returns (int24) {
-        return lastTick[poolId];
-    }
-
-    function setTickLast(PoolId poolId, int24 _tick) private {
-        lastTick[poolId] = _tick;
-    }
-
     constructor(
         IPoolManager poolManager,
-        Id _marketId
-    ) BaseHook(poolManager) ERC721("CallETH", "CALL") {
-        marketId = _marketId;
+        Id _morphoMarketId
+    ) BaseOptionHook(poolManager) ERC721("CallETH", "CALL") {
+        morphoMarketId = _morphoMarketId;
     }
 
     function getHookPermissions()
@@ -107,14 +74,8 @@ contract CallETH is BaseHook, ERC721, IOption {
         WSTETH.approve(OptionBaseLib.SWAP_ROUTER, type(uint256).max);
         OSQTH.approve(OptionBaseLib.SWAP_ROUTER, type(uint256).max);
 
-        IERC20(Currency.unwrap(key.currency0)).approve(
-            address(morpho),
-            type(uint256).max
-        );
-        IERC20(Currency.unwrap(key.currency1)).approve(
-            address(morpho),
-            type(uint256).max
-        );
+        WSTETH.approve(address(morpho), type(uint256).max);
+        USDC.approve(address(morpho), type(uint256).max);
 
         setTickLast(key.toId(), tick);
 
@@ -138,33 +99,39 @@ contract CallETH is BaseHook, ERC721, IOption {
     ) external returns (uint256 optionId) {
         console.log(">> deposit");
         if (amount == 0) revert ZeroLiquidity();
-        IERC20(Currency.unwrap(key.currency0)).transferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        WSTETH.transferFrom(msg.sender, address(this), amount);
 
-        int24 tickLower = getCurrentTick(key.toId());
-        int24 tickUpper = OptionMathLib.tickRoundDown(
-            OptionMathLib.getTickFromPrice(
-                OptionMathLib.getPriceFromTick(tickLower) * 2
-            ),
-            key.tickSpacing
-        );
-        console.log("Ticks, lower/upper:");
-        console.logInt(tickLower);
-        console.logInt(tickUpper);
+        int24 tickLower;
+        int24 tickUpper;
+        {
+            tickLower = getCurrentTick(key.toId());
+            tickUpper = OptionMathLib.tickRoundDown(
+                OptionMathLib.getTickFromPrice(
+                    OptionMathLib.getPriceFromTick(tickLower) * 2
+                ),
+                key.tickSpacing
+            );
+            console.log("Ticks, lower/upper:");
+            console.logInt(tickLower);
+            console.logInt(tickUpper);
 
-        poolManager.unlock(
-            abi.encodeCall(
-                this.unlockDepositPlace,
-                (key, amount / 2, tickLower, tickUpper)
-            )
-        );
+            uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
+                TickMath.getSqrtPriceAtTick(tickUpper),
+                TickMath.getSqrtPriceAtTick(tickLower),
+                amount / 2
+            );
+
+            poolManager.unlock(
+                abi.encodeCall(
+                    this.unlockModifyPosition,
+                    (key, int128(liquidity), tickLower, tickUpper)
+                )
+            );
+        }
 
         morpho.supplyCollateral(
-            morpho.idToMarketParams(marketId),
-            IERC20(Currency.unwrap(key.currency0)).balanceOf(address(this)),
+            morpho.idToMarketParams(morphoMarketId),
+            WSTETH.balanceOf(address(this)),
             address(this),
             ZERO_BYTES
         );
@@ -216,8 +183,8 @@ contract CallETH is BaseHook, ERC721, IOption {
 
             poolManager.unlock(
                 abi.encodeCall(
-                    this.unlockWithdrawPlace,
-                    (key, liquidity, tickLower, tickUpper)
+                    this.unlockModifyPosition,
+                    (key, -int128(liquidity), tickLower, tickUpper)
                 )
             );
         }
@@ -225,9 +192,12 @@ contract CallETH is BaseHook, ERC721, IOption {
         //** Now we could have, USDC & WSTETH
 
         //** if USDC is borrowed buy extra and close the position
-        morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
-        Market memory m = morpho.market(marketId);
-        MorphoPosition memory p = morpho.position(marketId, address(this));
+        morpho.accrueInterest(morpho.idToMarketParams(morphoMarketId)); //TODO: is this sync morpho here or not?
+        Market memory m = morpho.market(morphoMarketId);
+        MorphoPosition memory p = morpho.position(
+            morphoMarketId,
+            address(this)
+        );
         uint256 usdcToRepay = m.totalBorrowAssets; //TODO: this is a bad huck, fix in the future
         if (usdcToRepay != 0) {
             uint256 balanceUSDC = USDC.balanceOf(address(this));
@@ -248,7 +218,7 @@ contract CallETH is BaseHook, ERC721, IOption {
             }
 
             morpho.repay(
-                morpho.idToMarketParams(marketId),
+                morpho.idToMarketParams(morphoMarketId),
                 0,
                 p.borrowShares,
                 address(this),
@@ -257,101 +227,15 @@ contract CallETH is BaseHook, ERC721, IOption {
         }
 
         morpho.withdrawCollateral(
-            morpho.idToMarketParams(marketId),
+            morpho.idToMarketParams(morphoMarketId),
             p.collateral,
             address(this),
             address(this)
         );
 
         WSTETH.transfer(to, WSTETH.balanceOf(address(this)));
-    }
 
-    function unlockDepositPlace(
-        PoolKey calldata key,
-        uint256 amount,
-        int24 tickLower,
-        int24 tickUpper
-    ) external selfOnly returns (bytes memory) {
-        console.log("> unlockDepositPlace");
-
-        uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
-            TickMath.getSqrtPriceAtTick(tickUpper),
-            TickMath.getSqrtPriceAtTick(tickLower),
-            amount
-        );
-
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
-            key,
-            IPoolManager.ModifyLiquidityParams({
-                tickLower: tickLower,
-                tickUpper: tickUpper,
-                liquidityDelta: int128(liquidity),
-                salt: bytes32(ZERO_BYTES)
-            }),
-            ZERO_BYTES
-        );
-
-        if (delta.amount0() < 0) {
-            if (delta.amount1() != 0) revert InRange();
-
-            key.currency0.settle(
-                poolManager,
-                address(this),
-                uint256(uint128(-delta.amount0())),
-                false
-            );
-        }
-
-        if (delta.amount1() < 0) {
-            if (delta.amount0() != 0) revert InRange();
-
-            key.currency1.settle(
-                poolManager,
-                address(this),
-                uint256(uint128(-delta.amount1())),
-                false
-            );
-        }
-        return ZERO_BYTES;
-    }
-
-    function unlockWithdrawPlace(
-        PoolKey calldata key,
-        uint128 liquidity,
-        int24 tickLower,
-        int24 tickUpper
-    ) external selfOnly returns (bytes memory) {
-        console.log("> unlockWithdrawPlace");
-
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
-            key,
-            IPoolManager.ModifyLiquidityParams({
-                tickLower: tickLower,
-                tickUpper: tickUpper,
-                liquidityDelta: -int128(liquidity),
-                salt: bytes32(ZERO_BYTES)
-            }),
-            ZERO_BYTES
-        );
-
-        if (delta.amount0() > 0) {
-            key.currency0.take(
-                poolManager,
-                address(this),
-                uint256(uint128(delta.amount0())),
-                false
-            );
-        }
-
-        if (delta.amount1() > 0) {
-            key.currency1.take(
-                poolManager,
-                address(this),
-                uint256(uint128(delta.amount1())),
-                false
-            );
-        }
-        return ZERO_BYTES;
+        delete optionInfo[optionId];
     }
 
     function afterSwap(
@@ -372,7 +256,7 @@ contract CallETH is BaseHook, ERC721, IOption {
             console.log("> price go up...");
 
             morpho.borrow(
-                morpho.idToMarketParams(marketId),
+                morpho.idToMarketParams(morphoMarketId),
                 uint256(int256(-deltas.amount1())),
                 0,
                 address(this),
@@ -392,7 +276,10 @@ contract CallETH is BaseHook, ERC721, IOption {
         } else if (tick < getTickLast(key.toId())) {
             console.log("> price go down...");
 
-            MorphoPosition memory p = morpho.position(marketId, address(this));
+            MorphoPosition memory p = morpho.position(
+                morphoMarketId,
+                address(this)
+            );
             if (p.borrowShares != 0) {
                 //TODO: here implement the part if borrowShares to USDC is < deltas in USDC
                 OptionBaseLib.swapOSQTH_USDC_Out(
@@ -400,7 +287,7 @@ contract CallETH is BaseHook, ERC721, IOption {
                 );
 
                 morpho.repay(
-                    morpho.idToMarketParams(marketId),
+                    morpho.idToMarketParams(morphoMarketId),
                     uint256(int256(deltas.amount1())),
                     0,
                     address(this),
@@ -417,29 +304,5 @@ contract CallETH is BaseHook, ERC721, IOption {
 
     function tokenURI(uint256) public pure override returns (string memory) {
         return "";
-    }
-
-    // --- Helpers ---
-
-    function getCurrentTick(PoolId poolId) public view returns (int24) {
-        (, int24 currentTick, , ) = StateLibrary.getSlot0(poolManager, poolId);
-        return currentTick;
-    }
-
-    function getOptionPosition(
-        PoolKey memory key,
-        uint256 optionId
-    ) public view returns (uint128, int24, int24) {
-        OptionInfo memory info = optionInfo[optionId];
-
-        Position.Info memory positionInfo = StateLibrary.getPosition(
-            poolManager,
-            PoolIdLibrary.toId(key),
-            address(this),
-            info.tickLower,
-            info.tickUpper,
-            bytes32(ZERO_BYTES)
-        );
-        return (positionInfo.liquidity, info.tickLower, info.tickUpper);
     }
 }

@@ -18,60 +18,27 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {LiquidityAmounts} from "v4-core/../test/utils/LiquidityAmounts.sol";
 import {ERC721} from "solmate/tokens/ERC721.sol";
-import {BaseHook} from "@forks/BaseHook.sol";
-import {IWETH} from "@forks/IWETH.sol";
+import {BaseOptionHook} from "@src/BaseOptionHook.sol";
 
-import {IERC20Minimal as IERC20} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IController, Vault} from "@forks/squeeth-monorepo/IController.sol";
 import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
 
-contract PutETH is BaseHook, ERC721, IOption {
+contract PutETH is BaseOptionHook, ERC721 {
     using CurrencySettleTake for Currency;
     using PoolIdLibrary for PoolKey;
-
-    struct OptionInfo {
-        uint256 amount;
-        int24 tick;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 created;
-    }
-
-    IERC20 WSTETH = IERC20(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-    IWETH WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20 USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20 OSQTH = IERC20(0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B);
 
     IController constant powerTokenController =
         IController(0x64187ae08781B09368e6253F9E94951243A493D5);
 
-    Id public immutable marketId;
-
-    IMorpho public constant morpho =
-        IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
-
-    mapping(PoolId => int24) public lastTick;
-
-    uint256 private optionIdCounter = 0;
-    mapping(uint256 => OptionInfo) public optionInfo;
-
-    uint256 public vaultId;
-
-    function getTickLast(PoolId poolId) public view returns (int24) {
-        return lastTick[poolId];
-    }
-
-    function setTickLast(PoolId poolId, int24 _tick) private {
-        lastTick[poolId] = _tick;
-    }
+    uint256 public powerTokenVaultId;
 
     constructor(
         IPoolManager poolManager,
-        Id _marketId
-    ) BaseHook(poolManager) ERC721("PutETH", "PUT") {
-        marketId = _marketId;
+        Id _morphoMarketId
+    ) BaseOptionHook(poolManager) ERC721("PutETH", "PUT") {
+        morphoMarketId = _morphoMarketId;
     }
 
     function getHookPermissions()
@@ -116,7 +83,7 @@ contract PutETH is BaseHook, ERC721, IOption {
         WSTETH.approve(address(morpho), type(uint256).max);
         USDC.approve(address(morpho), type(uint256).max);
 
-        vaultId = powerTokenController.mintWPowerPerpAmount(0, 0, 0);
+        powerTokenVaultId = powerTokenController.mintWPowerPerpAmount(0, 0, 0);
 
         setTickLast(key.toId(), tick);
 
@@ -140,33 +107,39 @@ contract PutETH is BaseHook, ERC721, IOption {
     ) external returns (uint256 optionId) {
         console.log(">> deposit");
         if (amount == 0) revert ZeroLiquidity();
-        IERC20(Currency.unwrap(key.currency1)).transferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        USDC.transferFrom(msg.sender, address(this), amount);
 
-        int24 tickUpper = getCurrentTick(key.toId());
-        int24 tickLower = OptionMathLib.tickRoundDown(
-            OptionMathLib.getTickFromPrice(
-                OptionMathLib.getPriceFromTick(tickUpper) / 2
-            ),
-            key.tickSpacing
-        );
-        console.log("Ticks, lower/upper");
-        console.logInt(tickLower);
-        console.logInt(tickUpper);
+        int24 tickLower;
+        int24 tickUpper;
+        {
+            tickUpper = getCurrentTick(key.toId());
+            tickLower = OptionMathLib.tickRoundDown(
+                OptionMathLib.getTickFromPrice(
+                    OptionMathLib.getPriceFromTick(tickUpper) / 2
+                ),
+                key.tickSpacing
+            );
+            console.log("Ticks, lower/upper");
+            console.logInt(tickLower);
+            console.logInt(tickUpper);
 
-        poolManager.unlock(
-            abi.encodeCall(
-                this.unlockDepositPlace,
-                (key, amount / 2, tickLower, tickUpper)
-            )
-        );
+            uint128 liquidity = LiquidityAmounts.getLiquidityForAmount1(
+                TickMath.getSqrtPriceAtTick(tickUpper),
+                TickMath.getSqrtPriceAtTick(tickLower),
+                amount / 2
+            );
+
+            poolManager.unlock(
+                abi.encodeCall(
+                    this.unlockModifyPosition,
+                    (key, int128(liquidity), tickLower, tickUpper)
+                )
+            );
+        }
 
         morpho.supplyCollateral(
-            morpho.idToMarketParams(marketId),
-            IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this)),
+            morpho.idToMarketParams(morphoMarketId),
+            USDC.balanceOf(address(this)),
             address(this),
             ZERO_BYTES
         );
@@ -203,8 +176,8 @@ contract PutETH is BaseHook, ERC721, IOption {
 
             poolManager.unlock(
                 abi.encodeCall(
-                    this.unlockWithdrawPlace,
-                    (key, liquidity, tickLower, tickUpper)
+                    this.unlockModifyPosition,
+                    (key, -int128(liquidity), tickLower, tickUpper)
                 )
             );
         }
@@ -215,19 +188,22 @@ contract PutETH is BaseHook, ERC721, IOption {
         uint256 osqthToRepay;
         uint256 ethToObtain;
         {
-            morpho.accrueInterest(morpho.idToMarketParams(marketId)); //TODO: is this sync morpho here or not?
-            Market memory m = morpho.market(marketId);
+            morpho.accrueInterest(morpho.idToMarketParams(morphoMarketId)); //TODO: is this sync morpho here or not?
+            Market memory m = morpho.market(morphoMarketId);
             wstETHToRepay = m.totalBorrowAssets;
-            MorphoPosition memory p = morpho.position(marketId, address(this));
+            MorphoPosition memory p = morpho.position(
+                morphoMarketId,
+                address(this)
+            );
             usdcToObtain = p.collateral; //TODO: this is a bad huck, fix in the future
-            Vault memory vault = powerTokenController.vaults(vaultId);
+            Vault memory vault = powerTokenController.vaults(powerTokenVaultId);
             osqthToRepay = vault.shortAmount;
             ethToObtain = vault.collateralAmount;
         }
 
         if (wstETHToRepay == 0) {
             morpho.withdrawCollateral(
-                morpho.idToMarketParams(marketId),
+                morpho.idToMarketParams(morphoMarketId),
                 usdcToObtain,
                 address(this),
                 address(this)
@@ -263,7 +239,7 @@ contract PutETH is BaseHook, ERC721, IOption {
         //** close OSQTH
         {
             powerTokenController.burnWPowerPerpAmount(
-                vaultId,
+                powerTokenVaultId,
                 osqthToRepay,
                 ethToObtain
             );
@@ -282,7 +258,7 @@ contract PutETH is BaseHook, ERC721, IOption {
         // ** close morpho
         {
             morpho.repay(
-                morpho.idToMarketParams(marketId),
+                morpho.idToMarketParams(morphoMarketId),
                 wstETHToRepay,
                 0,
                 address(this),
@@ -291,7 +267,7 @@ contract PutETH is BaseHook, ERC721, IOption {
 
             logBalances();
             morpho.withdrawCollateral(
-                morpho.idToMarketParams(marketId),
+                morpho.idToMarketParams(morphoMarketId),
                 usdcToObtain,
                 address(this),
                 address(this)
@@ -301,94 +277,6 @@ contract PutETH is BaseHook, ERC721, IOption {
 
         logBalances();
         USDC.transfer(to, USDC.balanceOf(address(this)));
-    }
-
-    function unlockDepositPlace(
-        PoolKey calldata key,
-        uint256 amount,
-        int24 tickLower,
-        int24 tickUpper
-    ) external selfOnly returns (bytes memory) {
-        console.log("> unlockDepositPlace");
-
-        uint128 liquidity = LiquidityAmounts.getLiquidityForAmount1(
-            TickMath.getSqrtPriceAtTick(tickUpper),
-            TickMath.getSqrtPriceAtTick(tickLower),
-            amount
-        );
-
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
-            key,
-            IPoolManager.ModifyLiquidityParams({
-                tickLower: tickLower,
-                tickUpper: tickUpper,
-                liquidityDelta: int128(liquidity),
-                salt: bytes32(ZERO_BYTES)
-            }),
-            ZERO_BYTES
-        );
-
-        if (delta.amount0() < 0) {
-            if (delta.amount1() != 0) revert InRange();
-
-            key.currency0.settle(
-                poolManager,
-                address(this),
-                uint256(uint128(-delta.amount0())),
-                false
-            );
-        }
-
-        if (delta.amount1() < 0) {
-            if (delta.amount0() != 0) revert InRange();
-
-            key.currency1.settle(
-                poolManager,
-                address(this),
-                uint256(uint128(-delta.amount1())),
-                false
-            );
-        }
-        return ZERO_BYTES;
-    }
-
-    function unlockWithdrawPlace(
-        PoolKey calldata key,
-        uint128 liquidity,
-        int24 tickLower,
-        int24 tickUpper
-    ) external selfOnly returns (bytes memory) {
-        console.log("> unlockWithdrawPlace");
-
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
-            key,
-            IPoolManager.ModifyLiquidityParams({
-                tickLower: tickLower,
-                tickUpper: tickUpper,
-                liquidityDelta: -int128(liquidity),
-                salt: bytes32(ZERO_BYTES)
-            }),
-            ZERO_BYTES
-        );
-
-        if (delta.amount0() > 0) {
-            key.currency0.take(
-                poolManager,
-                address(this),
-                uint256(uint128(delta.amount0())),
-                false
-            );
-        }
-
-        if (delta.amount1() > 0) {
-            key.currency1.take(
-                poolManager,
-                address(this),
-                uint256(uint128(delta.amount1())),
-                false
-            );
-        }
-        return ZERO_BYTES;
     }
 
     function afterSwap(
@@ -410,7 +298,7 @@ contract PutETH is BaseHook, ERC721, IOption {
 
             OptionBaseLib.swapUSDC_OSQTH_In(uint256(int256(-deltas.amount1())));
 
-            Vault memory vault = powerTokenController.vaults(vaultId);
+            Vault memory vault = powerTokenController.vaults(powerTokenVaultId);
 
             uint256 collateralToWithdraw = OptionMathLib.getAssetsBuyShares(
                 OSQTH.balanceOf(address(this)),
@@ -419,7 +307,7 @@ contract PutETH is BaseHook, ERC721, IOption {
             );
 
             powerTokenController.burnWPowerPerpAmount(
-                vaultId,
+                powerTokenVaultId,
                 OSQTH.balanceOf(address(this)),
                 collateralToWithdraw
             );
@@ -433,7 +321,7 @@ contract PutETH is BaseHook, ERC721, IOption {
             );
 
             morpho.repay(
-                morpho.idToMarketParams(marketId),
+                morpho.idToMarketParams(morphoMarketId),
                 amountOut,
                 0,
                 address(this),
@@ -442,7 +330,7 @@ contract PutETH is BaseHook, ERC721, IOption {
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
             morpho.borrow(
-                morpho.idToMarketParams(marketId),
+                morpho.idToMarketParams(morphoMarketId),
                 uint256(int256(-deltas.amount0())),
                 0,
                 address(this),
@@ -454,9 +342,11 @@ contract PutETH is BaseHook, ERC721, IOption {
                 uint256(int256(-deltas.amount0()))
             );
             WETH.withdraw(wethAmountOut);
-            powerTokenController.deposit{value: wethAmountOut}(vaultId);
+            powerTokenController.deposit{value: wethAmountOut}(
+                powerTokenVaultId
+            );
             powerTokenController.mintPowerPerpAmount(
-                vaultId,
+                powerTokenVaultId,
                 wethAmountOut / 2,
                 0
             );
@@ -484,41 +374,4 @@ contract PutETH is BaseHook, ERC721, IOption {
 
     // ** fallback for wrapped eth unwrapping
     receive() external payable {}
-
-    // --- Helpers ---
-
-    function getCurrentTick(PoolId poolId) public view returns (int24) {
-        (, int24 currentTick, , ) = StateLibrary.getSlot0(poolManager, poolId);
-        return currentTick;
-    }
-
-    function getOptionPosition(
-        PoolKey memory key,
-        uint256 optionId
-    ) public view returns (uint128, int24, int24) {
-        OptionInfo memory info = optionInfo[optionId];
-
-        Position.Info memory positionInfo = StateLibrary.getPosition(
-            poolManager,
-            PoolIdLibrary.toId(key),
-            address(this),
-            info.tickLower,
-            info.tickUpper,
-            bytes32(ZERO_BYTES)
-        );
-        return (positionInfo.liquidity, info.tickLower, info.tickUpper);
-    }
-
-    //TODO: remove in production
-    function logBalances() internal view {
-        // console.log("> hook balances");
-        // if (WSTETH.balanceOf(address(this)) > 0)
-        //     console.log("WSTETH", WSTETH.balanceOf(address(this)));
-        // if (OSQTH.balanceOf(address(this)) > 0)
-        //     console.log("OSQTH ", OSQTH.balanceOf(address(this)));
-        // if (USDC.balanceOf(address(this)) > 0)
-        //     console.log("USDC  ", USDC.balanceOf(address(this)));
-        // if (WETH.balanceOf(address(this)) > 0)
-        //     console.log("WETH  ", WETH.balanceOf(address(this)));
-    }
 }
