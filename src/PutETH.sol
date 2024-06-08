@@ -3,18 +3,13 @@ pragma solidity ^0.8.25;
 
 import "forge-std/console.sol";
 
-import {Position} from "v4-core/libraries/Position.sol";
-import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
-import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
-import {Pool} from "v4-core/libraries/Pool.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {OptionMathLib} from "@src/libraries/OptionMathLib.sol";
 import {OptionBaseLib} from "@src/libraries/OptionBaseLib.sol";
 
 import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {Currency} from "v4-core/types/Currency.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {LiquidityAmounts} from "v4-core/../test/utils/LiquidityAmounts.sol";
 import {ERC721} from "solmate/tokens/ERC721.sol";
@@ -22,11 +17,9 @@ import {BaseOptionHook} from "@src/BaseOptionHook.sol";
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IController, Vault} from "@forks/squeeth-monorepo/IController.sol";
-import {IMorpho, MarketParams, Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
-import {IOption} from "@src/interfaces/IOption.sol";
+import {Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
 
 contract PutETH is BaseOptionHook, ERC721 {
-    using CurrencySettleTake for Currency;
     using PoolIdLibrary for PoolKey;
 
     IController constant powerTokenController =
@@ -228,6 +221,7 @@ contract PutETH is BaseOptionHook, ERC721 {
                     wstETHToRepay - WSTETH.balanceOf(address(this))
                 );
             }
+
             // No we have exact WSTETH, and some USDC
             OptionBaseLib.swapUSDC_OSQTH_Out(osqthToRepay);
             // No we have exact WSTETH, exact OSQTH and some USDC
@@ -252,6 +246,7 @@ contract PutETH is BaseOptionHook, ERC721 {
                 ethToObtain
             );
         }
+
         // No we have exact WSTETH, and some USDC
         logBalances();
 
