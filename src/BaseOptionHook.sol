@@ -42,6 +42,21 @@ abstract contract BaseOptionHook is BaseHook, IOption {
         uint256 created;
     }
 
+    uint256 public priceScalingFactor = 2;
+    uint256 public cRatio = 2;
+
+    function setPriceScalingFactor(
+        uint256 _priceScalingFactor
+    ) external onlyHookDeployer {
+        priceScalingFactor = _priceScalingFactor;
+    }
+
+    function setHedgingProportion(
+        uint256 _hedgedProportion
+    ) external onlyHookDeployer {
+        cRatio = _hedgedProportion;
+    }
+
     mapping(PoolId => int24) public lastTick;
     uint256 public optionIdCounter = 0;
     mapping(uint256 => OptionInfo) public optionInfo;

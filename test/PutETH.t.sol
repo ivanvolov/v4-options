@@ -108,7 +108,12 @@ contract PutETHTest is OptionTestBase {
 
         assertOptionV4PositionLiquidity(optionId, 5097266086499115);
         assertEqBalanceStateZero(alice.addr);
-        assertEqMorphoState(address(hook), 0, 0, amountToDeposit / 2);
+        assertEqMorphoState(
+            address(hook),
+            0,
+            0,
+            amountToDeposit / hook.cRatio()
+        );
     }
 
     function test_deposit_withdraw_not_option_owner_revert() public {

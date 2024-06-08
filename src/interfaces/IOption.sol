@@ -15,6 +15,10 @@ interface IOption {
 
     error NoSwapWillOccur();
 
+    function priceScalingFactor() external view returns (uint256);
+
+    function cRatio() external view returns (uint256);
+
     function getTickLast(PoolId poolId) external view returns (int24);
 
     function deposit(

@@ -14,8 +14,11 @@ abstract contract BaseHook is IHooks {
     error InvalidPool();
     error LockFailure();
     error HookNotImplemented();
+    error NotHookDeployer();
 
     bytes internal constant ZERO_BYTES = bytes("");
+
+    address public immutable hookDeployer;
 
     /// @notice The address of the pool manager
     IPoolManager public immutable poolManager;
@@ -23,6 +26,13 @@ abstract contract BaseHook is IHooks {
     constructor(IPoolManager _poolManager) {
         poolManager = _poolManager;
         validateHookAddress(this);
+        hookDeployer = msg.sender;
+    }
+
+    /// @dev Only the hook deployer may call this function
+    modifier onlyHookDeployer() {
+        if (msg.sender != hookDeployer) revert NotHookDeployer();
+        _;
     }
 
     /// @dev Only the pool manager may call this function
