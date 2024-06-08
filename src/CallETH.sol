@@ -100,7 +100,7 @@ contract CallETH is BaseOptionHook, ERC721 {
             tickLower = getCurrentTick(key.toId());
             tickUpper = OptionMathLib.tickRoundDown(
                 OptionMathLib.getTickFromPrice(
-                    OptionMathLib.getPriceFromTick(tickLower) * 2
+                    OptionMathLib.getPriceFromTick(tickLower) * 2 //TODO 2 as parameter
                 ),
                 key.tickSpacing
             );
@@ -111,7 +111,7 @@ contract CallETH is BaseOptionHook, ERC721 {
             uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
                 TickMath.getSqrtPriceAtTick(tickUpper),
                 TickMath.getSqrtPriceAtTick(tickLower),
-                amount / 2
+                amount / 2 //TODO weight as parameter
             );
 
             poolManager.unlock(

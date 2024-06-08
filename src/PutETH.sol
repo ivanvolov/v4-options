@@ -108,7 +108,7 @@ contract PutETH is BaseOptionHook, ERC721 {
             tickUpper = getCurrentTick(key.toId());
             tickLower = OptionMathLib.tickRoundDown(
                 OptionMathLib.getTickFromPrice(
-                    OptionMathLib.getPriceFromTick(tickUpper) / 2
+                    OptionMathLib.getPriceFromTick(tickUpper) / 2 //TODO 2 as parameter
                 ),
                 key.tickSpacing
             );
@@ -119,7 +119,7 @@ contract PutETH is BaseOptionHook, ERC721 {
             uint128 liquidity = LiquidityAmounts.getLiquidityForAmount1(
                 TickMath.getSqrtPriceAtTick(tickUpper),
                 TickMath.getSqrtPriceAtTick(tickLower),
-                amount / 2
+                amount / 2 //TODO weight as parameter
             );
 
             poolManager.unlock(
@@ -309,7 +309,7 @@ contract PutETH is BaseOptionHook, ERC721 {
             );
             powerTokenController.mintPowerPerpAmount(
                 powerTokenVaultId,
-                wethAmountOut / 2,
+                wethAmountOut / 2, //TODO 2 as parameter (CR or Collateralization ratio)
                 0
             );
             OptionBaseLib.swapOSQTH_USDC_In(OSQTH.balanceOf(address(this)));
