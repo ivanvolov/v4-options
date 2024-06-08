@@ -130,12 +130,7 @@ contract PutETH is BaseOptionHook, ERC721 {
             );
         }
 
-        morpho.supplyCollateral(
-            morpho.idToMarketParams(morphoMarketId),
-            USDC.balanceOf(address(this)),
-            address(this),
-            ZERO_BYTES
-        );
+        morphoSupplyCollateral(USDC.balanceOf(address(this)));
         optionId = optionIdCounter;
 
         optionInfo[optionId] = OptionInfo({
@@ -181,7 +176,7 @@ contract PutETH is BaseOptionHook, ERC721 {
         uint256 osqthToRepay;
         uint256 ethToObtain;
         {
-            morpho.accrueInterest(morpho.idToMarketParams(morphoMarketId)); //TODO: is this sync morpho here or not?
+            morphoSync();
             Market memory m = morpho.market(morphoMarketId);
             wstETHToRepay = m.totalBorrowAssets;
             MorphoPosition memory p = morpho.position(
@@ -195,12 +190,7 @@ contract PutETH is BaseOptionHook, ERC721 {
         }
 
         if (wstETHToRepay == 0) {
-            morpho.withdrawCollateral(
-                morpho.idToMarketParams(morphoMarketId),
-                usdcToObtain,
-                address(this),
-                address(this)
-            );
+            morphoWithdrawCollateral(usdcToObtain);
             USDC.transfer(to, USDC.balanceOf(address(this)));
             return;
         }
@@ -252,21 +242,10 @@ contract PutETH is BaseOptionHook, ERC721 {
 
         // ** close morpho
         {
-            morpho.repay(
-                morpho.idToMarketParams(morphoMarketId),
-                wstETHToRepay,
-                0,
-                address(this),
-                ZERO_BYTES
-            );
+            morphoReplay(wstETHToRepay, 0);
 
             logBalances();
-            morpho.withdrawCollateral(
-                morpho.idToMarketParams(morphoMarketId),
-                usdcToObtain,
-                address(this),
-                address(this)
-            );
+            morphoWithdrawCollateral(usdcToObtain);
         }
         // No we have USDC only
 
@@ -315,22 +294,10 @@ contract PutETH is BaseOptionHook, ERC721 {
                 collateralToWithdraw
             );
 
-            morpho.repay(
-                morpho.idToMarketParams(morphoMarketId),
-                amountOut,
-                0,
-                address(this),
-                ZERO_BYTES
-            );
+            morphoReplay(amountOut, 0);
         } else if (tick < getTickLast(key.toId())) {
             console.log(">> price go down...");
-            morpho.borrow(
-                morpho.idToMarketParams(morphoMarketId),
-                uint256(int256(-deltas.amount0())),
-                0,
-                address(this),
-                address(this)
-            );
+            morphoBorrow(uint256(int256(-deltas.amount0())), 0);
             uint256 wethAmountOut = OptionBaseLib.swapExactInput(
                 address(WSTETH),
                 address(WETH),

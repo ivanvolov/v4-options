@@ -122,12 +122,7 @@ contract CallETH is BaseOptionHook, ERC721 {
             );
         }
 
-        morpho.supplyCollateral(
-            morpho.idToMarketParams(morphoMarketId),
-            WSTETH.balanceOf(address(this)),
-            address(this),
-            ZERO_BYTES
-        );
+        morphoSupplyCollateral(WSTETH.balanceOf(address(this)));
         optionId = optionIdCounter;
 
         optionInfo[optionId] = OptionInfo({
@@ -185,13 +180,14 @@ contract CallETH is BaseOptionHook, ERC721 {
         //** Now we could have, USDC & WSTETH
 
         //** if USDC is borrowed buy extra and close the position
-        morpho.accrueInterest(morpho.idToMarketParams(morphoMarketId)); //TODO: is this sync morpho here or not?
+        morphoSync();
         Market memory m = morpho.market(morphoMarketId);
+        uint256 usdcToRepay = m.totalBorrowAssets; //TODO: this is a bad huck, fix in the future
         MorphoPosition memory p = morpho.position(
             morphoMarketId,
             address(this)
         );
-        uint256 usdcToRepay = m.totalBorrowAssets; //TODO: this is a bad huck, fix in the future
+
         if (usdcToRepay != 0) {
             uint256 balanceUSDC = USDC.balanceOf(address(this));
             if (usdcToRepay > balanceUSDC) {
@@ -210,22 +206,10 @@ contract CallETH is BaseOptionHook, ERC721 {
                 );
             }
 
-            morpho.repay(
-                morpho.idToMarketParams(morphoMarketId),
-                0,
-                p.borrowShares,
-                address(this),
-                ZERO_BYTES
-            );
+            morphoReplay(0, p.borrowShares);
         }
 
-        morpho.withdrawCollateral(
-            morpho.idToMarketParams(morphoMarketId),
-            p.collateral,
-            address(this),
-            address(this)
-        );
-
+        morphoWithdrawCollateral(p.collateral);
         WSTETH.transfer(to, WSTETH.balanceOf(address(this)));
 
         delete optionInfo[optionId];
@@ -248,13 +232,7 @@ contract CallETH is BaseOptionHook, ERC721 {
         if (tick > getTickLast(key.toId())) {
             console.log("> price go up...");
 
-            morpho.borrow(
-                morpho.idToMarketParams(morphoMarketId),
-                uint256(int256(-deltas.amount1())),
-                0,
-                address(this),
-                address(this)
-            );
+            morphoBorrow(uint256(int256(-deltas.amount1())), 0);
 
             uint256 amountOut = OptionBaseLib.swapExactInput(
                 address(USDC),
@@ -279,13 +257,7 @@ contract CallETH is BaseOptionHook, ERC721 {
                     uint256(int256(deltas.amount1()))
                 );
 
-                morpho.repay(
-                    morpho.idToMarketParams(morphoMarketId),
-                    uint256(int256(deltas.amount1())),
-                    0,
-                    address(this),
-                    ZERO_BYTES
-                );
+                morphoReplay(uint256(int256(deltas.amount1())), 0);
             }
         } else {
             console.log("> price not changing...");

@@ -20,6 +20,7 @@ import {IWETH} from "@forks/IWETH.sol";
 import {IMorpho, Id} from "@forks/morpho/IMorpho.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
 
+// TODO: check internal external functions
 abstract contract BaseOptionHook is BaseHook, IOption {
     using CurrencySettleTake for Currency;
 
@@ -147,5 +148,49 @@ abstract contract BaseOptionHook is BaseHook, IOption {
             console.log("USDC  ", USDC.balanceOf(address(this)));
         if (WETH.balanceOf(address(this)) > 0)
             console.log("WETH  ", WETH.balanceOf(address(this)));
+    }
+
+    // --- Morpho Wrappers ---
+
+    function morphoBorrow(uint256 amount, uint256 shares) internal {
+        morpho.borrow(
+            morpho.idToMarketParams(morphoMarketId),
+            amount,
+            shares,
+            address(this),
+            address(this)
+        );
+    }
+
+    function morphoReplay(uint256 amount, uint256 shares) internal {
+        morpho.repay(
+            morpho.idToMarketParams(morphoMarketId),
+            amount,
+            shares,
+            address(this),
+            ZERO_BYTES
+        );
+    }
+
+    function morphoWithdrawCollateral(uint256 amount) internal {
+        morpho.withdrawCollateral(
+            morpho.idToMarketParams(morphoMarketId),
+            amount,
+            address(this),
+            address(this)
+        );
+    }
+
+    function morphoSupplyCollateral(uint256 amount) internal {
+        morpho.supplyCollateral(
+            morpho.idToMarketParams(morphoMarketId),
+            amount,
+            address(this),
+            ZERO_BYTES
+        );
+    }
+
+    function morphoSync() internal {
+        morpho.accrueInterest(morpho.idToMarketParams(morphoMarketId)); //TODO: is this sync morpho here or not?
     }
 }
