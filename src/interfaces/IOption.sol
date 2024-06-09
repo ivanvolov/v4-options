@@ -19,6 +19,8 @@ interface IOption {
 
     function cRatio() external view returns (uint256);
 
+    function weight() external view returns (uint256);
+
     function getTickLast(PoolId poolId) external view returns (int24);
 
     function deposit(

@@ -3,7 +3,6 @@ pragma solidity ^0.8.25;
 
 import "forge-std/console.sol";
 
-import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {OptionMathLib} from "@src/libraries/OptionMathLib.sol";
 import {OptionBaseLib} from "@src/libraries/OptionBaseLib.sol";
@@ -26,31 +25,6 @@ contract CallETH is BaseOptionHook, ERC721 {
         Id _morphoMarketId
     ) BaseOptionHook(poolManager) ERC721("CallETH", "CALL") {
         morphoMarketId = _morphoMarketId;
-    }
-
-    function getHookPermissions()
-        public
-        pure
-        override
-        returns (Hooks.Permissions memory)
-    {
-        return
-            Hooks.Permissions({
-                beforeInitialize: false,
-                afterInitialize: true,
-                beforeAddLiquidity: true,
-                afterAddLiquidity: false,
-                beforeRemoveLiquidity: false,
-                afterRemoveLiquidity: false,
-                beforeSwap: false,
-                afterSwap: true,
-                beforeDonate: false,
-                afterDonate: false,
-                beforeSwapReturnDelta: false,
-                afterSwapReturnDelta: false,
-                afterAddLiquidityReturnDelta: false,
-                afterRemoveLiquidityReturnDelta: false
-            });
     }
 
     function afterInitialize(
@@ -112,7 +86,7 @@ contract CallETH is BaseOptionHook, ERC721 {
             uint128 liquidity = LiquidityAmounts.getLiquidityForAmount0(
                 TickMath.getSqrtPriceAtTick(tickUpper),
                 TickMath.getSqrtPriceAtTick(tickLower),
-                amount / cRatio
+                amount / weight
             );
 
             poolManager.unlock(
@@ -149,17 +123,7 @@ contract CallETH is BaseOptionHook, ERC721 {
         //** swap all OSQTH in WSTETH
         uint256 balanceOSQTH = OSQTH.balanceOf(address(this));
         if (balanceOSQTH != 0) {
-            uint256 amountWETH = OptionBaseLib.swapExactInput(
-                address(OSQTH),
-                address(WETH),
-                uint256(int256(balanceOSQTH))
-            );
-
-            OptionBaseLib.swapExactInput(
-                address(WETH),
-                address(WSTETH),
-                amountWETH
-            );
+            OptionBaseLib.swapOSQTH_WSTETH_In(uint256(int256(balanceOSQTH)));
         }
 
         //** close position into WSTETH & USDC
@@ -177,8 +141,6 @@ contract CallETH is BaseOptionHook, ERC721 {
                 )
             );
         }
-
-        //** Now we could have, USDC & WSTETH
 
         //** if USDC is borrowed buy extra and close the position
         morphoSync();
@@ -234,17 +196,7 @@ contract CallETH is BaseOptionHook, ERC721 {
             console.log("> price go up...");
 
             morphoBorrow(uint256(int256(-deltas.amount1())), 0);
-
-            uint256 amountOut = OptionBaseLib.swapExactInput(
-                address(USDC),
-                address(WETH),
-                uint256(int256(-deltas.amount1()))
-            );
-            OptionBaseLib.swapExactInput(
-                address(WETH),
-                address(OSQTH),
-                amountOut
-            );
+            OptionBaseLib.swapUSDC_OSQTH_In(uint256(int256(-deltas.amount1())));
         } else if (tick < getTickLast(key.toId())) {
             console.log("> price go down...");
 

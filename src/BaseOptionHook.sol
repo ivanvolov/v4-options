@@ -3,6 +3,7 @@ pragma solidity ^0.8.25;
 
 import "forge-std/console.sol";
 
+import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {CurrencySettleTake} from "v4-core/libraries/CurrencySettleTake.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {OptionBaseLib} from "@src/libraries/OptionBaseLib.sol";
@@ -44,6 +45,7 @@ abstract contract BaseOptionHook is BaseHook, IOption {
 
     uint256 public priceScalingFactor = 2;
     uint256 public cRatio = 2;
+    uint256 public weight = 2;
 
     function setPriceScalingFactor(
         uint256 _priceScalingFactor
@@ -51,10 +53,12 @@ abstract contract BaseOptionHook is BaseHook, IOption {
         priceScalingFactor = _priceScalingFactor;
     }
 
-    function setHedgingProportion(
-        uint256 _hedgedProportion
-    ) external onlyHookDeployer {
-        cRatio = _hedgedProportion;
+    function setCRatio(uint256 _cRatio) external onlyHookDeployer {
+        cRatio = _cRatio;
+    }
+
+    function setWeight(uint256 _weight) external onlyHookDeployer {
+        weight = _weight;
     }
 
     mapping(PoolId => int24) public lastTick;
@@ -70,6 +74,31 @@ abstract contract BaseOptionHook is BaseHook, IOption {
     }
 
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+
+    function getHookPermissions()
+        public
+        pure
+        override
+        returns (Hooks.Permissions memory)
+    {
+        return
+            Hooks.Permissions({
+                beforeInitialize: false,
+                afterInitialize: true,
+                beforeAddLiquidity: true,
+                afterAddLiquidity: false,
+                beforeRemoveLiquidity: false,
+                afterRemoveLiquidity: false,
+                beforeSwap: false,
+                afterSwap: true,
+                beforeDonate: false,
+                afterDonate: false,
+                beforeSwapReturnDelta: false,
+                afterSwapReturnDelta: false,
+                afterAddLiquidityReturnDelta: false,
+                afterRemoveLiquidityReturnDelta: false
+            });
+    }
 
     function getCurrentTick(
         PoolId poolId

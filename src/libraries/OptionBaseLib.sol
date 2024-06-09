@@ -113,6 +113,11 @@ library OptionBaseLib {
             swapExactInput(WETH, OSQTH, swapExactInput(USDC, WETH, amountIn));
     }
 
+    function swapOSQTH_WSTETH_In(uint256 amountIn) internal returns (uint256) {
+        return
+            swapExactInput(WETH, WSTETH, swapExactInput(OSQTH, WETH, amountIn));
+    }
+
     function swapOSQTH_USDC_Out(uint256 amountOut) internal returns (uint256) {
         return
             swapExactOutputPath(
@@ -136,22 +141,6 @@ library OptionBaseLib {
                     WETH,
                     ETH_USDC_POOL_FEE,
                     USDC
-                ),
-                amountOut
-            );
-    }
-
-    function swapWSTETH_OSQTH_Out(
-        uint256 amountOut
-    ) internal returns (uint256) {
-        return
-            swapExactOutputPath(
-                abi.encodePacked(
-                    OSQTH,
-                    ETH_OSQTH_POOL_FEE,
-                    WETH,
-                    WSTETH_ETH_POOL_FEE,
-                    WSTETH
                 ),
                 amountOut
             );

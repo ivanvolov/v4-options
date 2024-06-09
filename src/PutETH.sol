@@ -3,7 +3,6 @@ pragma solidity ^0.8.25;
 
 import "forge-std/console.sol";
 
-import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {OptionMathLib} from "@src/libraries/OptionMathLib.sol";
 import {OptionBaseLib} from "@src/libraries/OptionBaseLib.sol";
@@ -32,31 +31,6 @@ contract PutETH is BaseOptionHook, ERC721 {
         Id _morphoMarketId
     ) BaseOptionHook(poolManager) ERC721("PutETH", "PUT") {
         morphoMarketId = _morphoMarketId;
-    }
-
-    function getHookPermissions()
-        public
-        pure
-        override
-        returns (Hooks.Permissions memory)
-    {
-        return
-            Hooks.Permissions({
-                beforeInitialize: false,
-                afterInitialize: true,
-                beforeAddLiquidity: true,
-                afterAddLiquidity: false,
-                beforeRemoveLiquidity: false,
-                afterRemoveLiquidity: false,
-                beforeSwap: false,
-                afterSwap: true,
-                beforeDonate: false,
-                afterDonate: false,
-                beforeSwapReturnDelta: false,
-                afterSwapReturnDelta: false,
-                afterAddLiquidityReturnDelta: false,
-                afterRemoveLiquidityReturnDelta: false
-            });
     }
 
     function afterInitialize(
@@ -120,7 +94,7 @@ contract PutETH is BaseOptionHook, ERC721 {
             uint128 liquidity = LiquidityAmounts.getLiquidityForAmount1(
                 TickMath.getSqrtPriceAtTick(tickUpper),
                 TickMath.getSqrtPriceAtTick(tickLower),
-                amount / cRatio
+                amount / weight
             );
 
             poolManager.unlock(
