@@ -20,6 +20,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IWETH} from "@forks/IWETH.sol";
 import {IMorpho, Id} from "@forks/morpho/IMorpho.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
+import {IHedgehogLoyaltyMock} from "@src/interfaces/IHedgehogLoyaltyMock.sol";
 
 // TODO: check internal external functions
 abstract contract BaseOptionHook is BaseHook, IOption {
@@ -35,17 +36,12 @@ abstract contract BaseOptionHook is BaseHook, IOption {
     IMorpho public constant morpho =
         IMorpho(0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb);
 
-    struct OptionInfo {
-        uint256 amount;
-        int24 tick;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 created;
-    }
+    IHedgehogLoyaltyMock public loyalty;
 
     uint256 public priceScalingFactor = 2;
     uint256 public cRatio = 2;
     uint256 public weight = 2;
+    uint256 public performanceFee = 1e16;
 
     function setPriceScalingFactor(
         uint256 _priceScalingFactor
@@ -61,11 +57,28 @@ abstract contract BaseOptionHook is BaseHook, IOption {
         weight = _weight;
     }
 
-    mapping(PoolId => int24) public lastTick;
-    uint256 public optionIdCounter = 0;
-    mapping(uint256 => OptionInfo) public optionInfo;
+    function setPerformanceFee(
+        uint256 _performanceFee
+    ) external onlyHookDeployer {
+        performanceFee = _performanceFee;
+    }
 
-    function getTickLast(PoolId poolId) public view returns (int24) {
+    function getUserFee(address user) public view returns (uint256) {
+        if (loyalty.isLoyal(user) == 0) return performanceFee;
+        return 0;
+    }
+
+    mapping(PoolId => int24) lastTick;
+    uint256 public optionIdCounter = 0;
+    mapping(uint256 => OptionInfo) optionInfo;
+
+    function getOptionInfo(
+        uint256 optionId
+    ) public view override returns (OptionInfo memory) {
+        return optionInfo[optionId];
+    }
+
+    function getTickLast(PoolId poolId) public view override returns (int24) {
         return lastTick[poolId];
     }
 
@@ -73,7 +86,12 @@ abstract contract BaseOptionHook is BaseHook, IOption {
         lastTick[poolId] = _tick;
     }
 
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+    constructor(
+        IPoolManager _poolManager,
+        IHedgehogLoyaltyMock _loyalty
+    ) BaseHook(_poolManager) {
+        loyalty = _loyalty;
+    }
 
     function getHookPermissions()
         public

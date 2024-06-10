@@ -12,6 +12,7 @@ import {OptionTestBase} from "@test/libraries/OptionTestBase.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
 import {PutETH} from "@src/PutETH.sol";
+import {HedgehogLoyaltyMock} from "@test/libraries/HedgehogLoyaltyMock.sol";
 
 import {IController, Vault} from "@forks/squeeth-monorepo/IController.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
@@ -114,6 +115,19 @@ contract PutETHTest is OptionTestBase {
             0,
             amountToDeposit / hook.cRatio()
         );
+        IOption.OptionInfo memory info = hook.getOptionInfo(optionId);
+        assertEq(info.fee, 1e16);
+    }
+
+    function test_deposit_with_loyalty() public {
+        uint256 amountToDeposit = 200000 * 1e6;
+        loyalty.setIsLoyal(alice.addr, uint64(block.number));
+
+        deal(address(USDC), address(alice.addr), amountToDeposit);
+        vm.prank(alice.addr);
+        optionId = hook.deposit(key, amountToDeposit, alice.addr);
+        IOption.OptionInfo memory info = hook.getOptionInfo(optionId);
+        assertEq(info.fee, 0);
     }
 
     function test_deposit_withdraw_not_option_owner_revert() public {
@@ -191,6 +205,8 @@ contract PutETHTest is OptionTestBase {
     function init_hook() internal {
         router = new HookEnabledSwapRouter(manager);
 
+        loyalty = new HedgehogLoyaltyMock();
+
         address payable hookAddress = payable(
             address(
                 uint160(
@@ -200,7 +216,11 @@ contract PutETHTest is OptionTestBase {
                 )
             )
         );
-        deployCodeTo("PutETH.sol", abi.encode(manager, marketId), hookAddress);
+        deployCodeTo(
+            "PutETH.sol",
+            abi.encode(manager, marketId, loyalty),
+            hookAddress
+        );
         PutETH _hook = PutETH(hookAddress);
 
         uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(-192232);

@@ -15,6 +15,19 @@ interface IOption {
 
     error NoSwapWillOccur();
 
+    struct OptionInfo {
+        uint256 amount;
+        int24 tick;
+        int24 tickLower;
+        int24 tickUpper;
+        uint256 created;
+        uint256 fee;
+    }
+
+    function getOptionInfo(
+        uint256 optionId
+    ) external view returns (OptionInfo memory);
+
     function priceScalingFactor() external view returns (uint256);
 
     function cRatio() external view returns (uint256);

@@ -17,6 +17,7 @@ import {BaseOptionHook} from "@src/BaseOptionHook.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {IController, Vault} from "@forks/squeeth-monorepo/IController.sol";
 import {Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
+import {IHedgehogLoyaltyMock} from "@src/interfaces/IHedgehogLoyaltyMock.sol";
 
 contract PutETH is BaseOptionHook, ERC721 {
     using PoolIdLibrary for PoolKey;
@@ -28,8 +29,9 @@ contract PutETH is BaseOptionHook, ERC721 {
 
     constructor(
         IPoolManager poolManager,
-        Id _morphoMarketId
-    ) BaseOptionHook(poolManager) ERC721("PutETH", "PUT") {
+        Id _morphoMarketId,
+        IHedgehogLoyaltyMock _loyalty
+    ) BaseOptionHook(poolManager, _loyalty) ERC721("PutETH", "PUT") {
         morphoMarketId = _morphoMarketId;
     }
 
@@ -113,7 +115,8 @@ contract PutETH is BaseOptionHook, ERC721 {
             tick: getCurrentTick(key.toId()),
             tickLower: tickLower,
             tickUpper: tickUpper,
-            created: block.timestamp
+            created: block.timestamp,
+            fee: getUserFee(msg.sender)
         });
 
         _mint(to, optionId);
