@@ -21,3 +21,5 @@ osqth
 wsteth
 squeeth
 wsqueeth
+circuit
+Brevis

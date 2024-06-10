@@ -64,3 +64,7 @@ cRatio = 50%
 2. burn oSQTH position and get cRatio percent of collateral back
 3. swap ETH into wstETH
 4. repay on Morpho pool using this wstETH
+
+##  Loyalty program using Brevis 
+
+You could go into the `brevisCircuit` folder to deploy and use the Brevis circuit contract on Sepolia testnet.
