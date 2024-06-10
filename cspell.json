@@ -6,20 +6,31 @@
     "defi",
     "softwareTerms",
     "typescript",
+    "golang",
+    "go",
     "node",
     "en_US",
     "filetypes"
   ],
   "dictionaryDefinitions": [
     { "name": "solidity", "path": "./cspell.dict/solidity.txt" },
-    { "name": "defi", "path": "./cspell.dict/defi.txt" }
+    { "name": "defi", "path": "./cspell.dict/defi.txt" },
+    { "name": "golang", "path": "./cspell.dict/go.txt" }
   ],
   "words": ["calros", "devc"],
   "ignorePaths": [
     "**/cspell.dict/**",
+    "**/out/**",
+    "**/typechain/**",
+    "**/deployments/**",
+    "**/artifacts/**",
+    "**/cache/**",
     "**/node_modules/**",
     "./lib/**",
-    "cspell.json"
+    "**.sum",
+    "**.mod",
+    "**/remappings.txt",
+    "**/cspell.json"
   ],
   "import": [],
   "enabled": true

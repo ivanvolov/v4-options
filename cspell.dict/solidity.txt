@@ -92,3 +92,5 @@ Sloads
 Sepolia
 refundee
 IVikkk
+nomicfoundation
+typechain

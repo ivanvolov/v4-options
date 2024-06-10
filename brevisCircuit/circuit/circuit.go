@@ -15,7 +15,7 @@ func (c *AppCircuit) Allocate() (maxReceipts, maxStorage, maxTransactions int) {
 }
 
 // Quick Deposit periphery contract
-var HeadgehogAddress = sdk.ConstUint248(
+var HedgehogAddress = sdk.ConstUint248(
 	common.HexToAddress("0x468363E262999046BAFC5EA954768920ee349358"))
 
 func (c *AppCircuit) Define(api *sdk.CircuitAPI, in sdk.DataInput) error {
@@ -23,7 +23,7 @@ func (c *AppCircuit) Define(api *sdk.CircuitAPI, in sdk.DataInput) error {
 
 	tx := sdk.GetUnderlying(txs, 0)
 	// This is our main check logic
-	api.Uint248.AssertIsEqual(tx.To, HeadgehogAddress)
+	api.Uint248.AssertIsEqual(tx.To, HedgehogAddress)
 	api.Uint248.AssertIsLessOrEqual(tx.BlockNum, sdk.ConstUint248(17021883))
 
 	// Output variables can be later accessed in our app contract
