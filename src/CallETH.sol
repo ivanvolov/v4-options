@@ -18,6 +18,9 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
 import {IHedgehogLoyaltyMock} from "@src/interfaces/IHedgehogLoyaltyMock.sol";
 
+/// @title Call like wstETH option
+/// @author IVikkk
+/// @custom:contact vivan.volovik@gmail.com
 contract CallETH is BaseOptionHook, ERC721 {
     using PoolIdLibrary for PoolKey;
 
@@ -65,7 +68,7 @@ contract CallETH is BaseOptionHook, ERC721 {
         PoolKey calldata key,
         uint256 amount,
         address to
-    ) external returns (uint256 optionId) {
+    ) external override returns (uint256 optionId) {
         console.log(">> deposit");
         if (amount == 0) revert ZeroLiquidity();
         WSTETH.transferFrom(msg.sender, address(this), amount);
@@ -119,7 +122,7 @@ contract CallETH is BaseOptionHook, ERC721 {
         PoolKey calldata key,
         uint256 optionId,
         address to
-    ) external {
+    ) external override {
         console.log(">> withdraw");
         if (ownerOf(optionId) != msg.sender) revert NotAnOptionOwner();
 
@@ -148,7 +151,7 @@ contract CallETH is BaseOptionHook, ERC721 {
         //** if USDC is borrowed buy extra and close the position
         morphoSync();
         Market memory m = morpho.market(morphoMarketId);
-        uint256 usdcToRepay = m.totalBorrowAssets; //TODO: this is a bad huck, fix in the future
+        uint256 usdcToRepay = m.totalBorrowAssets;
         MorphoPosition memory p = morpho.position(
             morphoMarketId,
             address(this)
@@ -157,14 +160,12 @@ contract CallETH is BaseOptionHook, ERC721 {
         if (usdcToRepay != 0) {
             uint256 balanceUSDC = USDC.balanceOf(address(this));
             if (usdcToRepay > balanceUSDC) {
-                console.log("> buy USDC to repay");
                 OptionBaseLib.swapExactOutput(
                     address(WSTETH),
                     address(USDC),
                     usdcToRepay - balanceUSDC
                 );
             } else {
-                console.log("> sell extra USDC");
                 OptionBaseLib.swapExactOutput(
                     address(USDC),
                     address(WSTETH),
@@ -191,7 +192,6 @@ contract CallETH is BaseOptionHook, ERC721 {
         console.log(">> afterSwap");
         if (deltas.amount0() == 0 && deltas.amount1() == 0)
             revert NoSwapWillOccur();
-        //TODO: add here revert if the pool have enough liquidity but the extra operations is not possible for the current swap magnitude
 
         int24 tick = getCurrentTick(key.toId());
 
@@ -208,7 +208,6 @@ contract CallETH is BaseOptionHook, ERC721 {
                 address(this)
             );
             if (p.borrowShares != 0) {
-                //TODO: here implement the part if borrowShares to USDC is < deltas in USDC
                 OptionBaseLib.swapOSQTH_USDC_Out(
                     uint256(int256(deltas.amount1()))
                 );

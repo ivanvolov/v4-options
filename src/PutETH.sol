@@ -19,6 +19,9 @@ import {IController, Vault} from "@forks/squeeth-monorepo/IController.sol";
 import {Position as MorphoPosition, Id, Market} from "@forks/morpho/IMorpho.sol";
 import {IHedgehogLoyaltyMock} from "@src/interfaces/IHedgehogLoyaltyMock.sol";
 
+/// @title Put like wstETH option
+/// @author IVikkk
+/// @custom:contact vivan.volovik@gmail.com
 contract PutETH is BaseOptionHook, ERC721 {
     using PoolIdLibrary for PoolKey;
 
@@ -73,7 +76,7 @@ contract PutETH is BaseOptionHook, ERC721 {
         PoolKey calldata key,
         uint256 amount,
         address to
-    ) external returns (uint256 optionId) {
+    ) external override returns (uint256 optionId) {
         console.log(">> deposit");
         if (amount == 0) revert ZeroLiquidity();
         USDC.transferFrom(msg.sender, address(this), amount);
@@ -127,7 +130,7 @@ contract PutETH is BaseOptionHook, ERC721 {
         PoolKey calldata key,
         uint256 optionId,
         address to
-    ) external {
+    ) external override {
         console.log(">> withdraw");
         if (ownerOf(optionId) != msg.sender) revert NotAnOptionOwner();
 
@@ -161,7 +164,7 @@ contract PutETH is BaseOptionHook, ERC721 {
                 morphoMarketId,
                 address(this)
             );
-            usdcToObtain = p.collateral; //TODO: this is a bad huck, fix in the future
+            usdcToObtain = p.collateral;
             Vault memory vault = powerTokenController.vaults(powerTokenVaultId);
             osqthToRepay = vault.shortAmount;
             ethToObtain = vault.collateralAmount;
@@ -175,7 +178,7 @@ contract PutETH is BaseOptionHook, ERC721 {
 
         // ** make all amounts ready to repay, now we have WSTETH and USDC
         {
-            // SWAP extra WSTETH to WETH
+            // ** SWAP extra WSTETH to WETH
             if (WSTETH.balanceOf(address(this)) > wstETHToRepay) {
                 OptionBaseLib.swapExactInput(
                     address(WSTETH),
@@ -190,15 +193,15 @@ contract PutETH is BaseOptionHook, ERC721 {
                 );
             }
 
-            // No we have exact WSTETH, and some USDC
+            // ** No we have exact WSTETH, and some USDC
             OptionBaseLib.swapUSDC_OSQTH_Out(osqthToRepay);
-            // No we have exact WSTETH, exact OSQTH and some USDC
+            // ** No we have exact WSTETH, exact OSQTH and some USDC
         }
 
-        // No we have exact WSTETH, exact OSQTH and some USDC
+        // ** No we have exact WSTETH, exact OSQTH and some USDC
         logBalances();
 
-        //** close OSQTH
+        // ** close OSQTH
         {
             powerTokenController.burnWPowerPerpAmount(
                 powerTokenVaultId,
@@ -215,7 +218,7 @@ contract PutETH is BaseOptionHook, ERC721 {
             );
         }
 
-        // No we have exact WSTETH, and some USDC
+        // ** No we have exact WSTETH, and some USDC
         logBalances();
 
         // ** close morpho
@@ -225,7 +228,7 @@ contract PutETH is BaseOptionHook, ERC721 {
             logBalances();
             morphoWithdrawCollateral(usdcToObtain);
         }
-        // No we have USDC only
+        // ** No we have USDC only
 
         logBalances();
         USDC.transfer(to, USDC.balanceOf(address(this)));
@@ -241,7 +244,6 @@ contract PutETH is BaseOptionHook, ERC721 {
         console.log(">> afterSwap");
         if (deltas.amount0() == 0 && deltas.amount1() == 0)
             revert NoSwapWillOccur();
-        //TODO: add here revert if the pool have enough liquidity but the extra operations is not possible for the current swap magnitude
 
         int24 tick = getCurrentTick(key.toId());
 

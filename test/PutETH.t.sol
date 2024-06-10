@@ -17,7 +17,6 @@ import {HedgehogLoyaltyMock} from "@test/libraries/HedgehogLoyaltyMock.sol";
 import {IController, Vault} from "@forks/squeeth-monorepo/IController.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
 
-//TODO: add here my mail and some credentials to bee cool
 contract PutETHTest is OptionTestBase {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
@@ -176,7 +175,7 @@ contract PutETHTest is OptionTestBase {
     function test_swap_price_down_then_up() public {
         test_swap_price_down();
 
-        swapUSDC_WSTETH_Out(231112960856211000); // x% of 11555648042810551244
+        swapUSDC_WSTETH_Out(231112960856211000);
 
         assertEqBalanceState(swapper.addr, 231112960856211000, 44216245243);
         assertEqBalanceState(address(hook), 0, 9297080036);

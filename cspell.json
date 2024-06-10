@@ -16,8 +16,8 @@
   ],
   "words": ["calros", "devc"],
   "ignorePaths": [
-    "./cspell.dict/**",
-    "./node_modules/**",
+    "**/cspell.dict/**",
+    "**/node_modules/**",
     "./lib/**",
     "cspell.json"
   ],

@@ -22,7 +22,6 @@ import {IMorpho, Id} from "@forks/morpho/IMorpho.sol";
 import {IOption} from "@src/interfaces/IOption.sol";
 import {IHedgehogLoyaltyMock} from "@src/interfaces/IHedgehogLoyaltyMock.sol";
 
-// TODO: check internal external functions
 abstract contract BaseOptionHook is BaseHook, IOption {
     using CurrencySettleTake for Currency;
 
@@ -74,7 +73,7 @@ abstract contract BaseOptionHook is BaseHook, IOption {
 
     function getOptionInfo(
         uint256 optionId
-    ) public view override returns (OptionInfo memory) {
+    ) external view override returns (OptionInfo memory) {
         return optionInfo[optionId];
     }
 
@@ -253,6 +252,6 @@ abstract contract BaseOptionHook is BaseHook, IOption {
     }
 
     function morphoSync() internal {
-        morpho.accrueInterest(morpho.idToMarketParams(morphoMarketId)); //TODO: is this sync morpho here or not?
+        morpho.accrueInterest(morpho.idToMarketParams(morphoMarketId));
     }
 }

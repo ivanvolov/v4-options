@@ -65,6 +65,26 @@ cRatio = 50%
 3. swap ETH into wstETH
 4. repay on Morpho pool using this wstETH
 
-##  Loyalty program using Brevis 
 
-You could go into the `brevisCircuit` folder to deploy and use the Brevis circuit contract on Sepolia testnet.
+
+## Setting up
+
+#### Testing
+
+Test all project
+```
+make test_all
+```
+
+Test call option
+```
+make test_call
+```
+
+or put option
+```
+make test_put
+```
+
+## Loyalty program using Brevis 
+You could go into the `brevisCircuit` folder to deploy, test and use the Brevis circuit contract on Sepolia testnet.

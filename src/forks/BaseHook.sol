@@ -20,7 +20,6 @@ abstract contract BaseHook is IHooks {
 
     address public immutable hookDeployer;
 
-    /// @notice The address of the pool manager
     IPoolManager public immutable poolManager;
 
     constructor(IPoolManager _poolManager) {
